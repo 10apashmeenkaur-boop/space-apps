@@ -51,47 +51,6 @@ def main():
         name = f"{i:02d}_{cls}_{iid[:8]}.png"
         Image.fromarray(load_image(iid)).save(C.SAMPLES_DIR / name, optimize=True)
         print(name, " ".join(f"{c}={v:.0%}" for c, v in zip(C.CLASSES, frac)))
-    build_gallery(chosen)
-
-
-def build_gallery(chosen):
-    """Analysed overlays (AI terrain map + safe route) for the map tab's ground-truth gallery."""
-    import cv2
-
-    from src.briefing import make_briefing
-    from src.infer import load_classifier, proba_grid, upsample
-    from src.planner import plan
-
-    clf = load_classifier()
-    pal = np.array([C.COLORS[c] for c in C.CLASSES], np.float32)
-    out = C.SAMPLES_DIR / "analysed"
-    out.mkdir(exist_ok=True)
-    for f in out.glob("*"):
-        f.unlink()
-    index = []
-    for i, (_, iid, _) in enumerate(chosen, 1):
-        grey = load_image(iid)
-        prob = proba_grid(clf, np.load(C.FEAT_DIR / "grid" / f"{iid}.npy"))
-        res = plan(prob)
-        brief = make_briefing(res)
-        v = 512
-        g = cv2.resize(grey, (v, v), interpolation=cv2.INTER_AREA).astype(np.float32)
-        lab = upsample(prob, v).argmax(-1)
-        img = (0.5 * np.repeat(g[..., None], 3, -1) + 0.5 * pal[lab]).astype(np.uint8)
-        if res["path"]:
-            s = v / res["prob"].shape[0]
-            pts = np.array([(int((c + 0.5) * s), int((r + 0.5) * s)) for r, c in res["path"]], np.int32)
-            cv2.polylines(img, [pts], False, (0, 0, 0), 7, cv2.LINE_AA)
-            cv2.polylines(img, [pts], False, (40, 230, 90), 4, cv2.LINE_AA)
-        side = np.concatenate([np.repeat(cv2.resize(grey, (v, v))[..., None], 3, -1), img], 1)
-        name = f"{i:02d}_{iid[:8]}.jpg"
-        Image.fromarray(side).save(out / name, quality=88)
-        f = brief["near_field_fractions"]
-        index.append({"file": name, "id": iid,
-                      "caption": f"{brief['verdict']} - near field: sand {f['sand']:.0%}, "
-                                 f"big rock {f['bigrock']:.0%}, bedrock {f['bedrock']:.0%}, soil {f['soil']:.0%}"})
-    (out / "index.json").write_text(json.dumps(index, indent=1))
-    print(f"gallery: {len(index)} analysed images -> {out}")
 
 
 if __name__ == "__main__":

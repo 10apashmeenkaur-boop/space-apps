@@ -30,21 +30,42 @@ judge both exists, but it is scattered across missions, instruments and archives
 ## What we built
 
 **1. Marswalk Map (Gale Crater, Curiosity's field site)**: one Leaflet map with layers from
-five NASA data sources:
+several NASA missions and archives:
 
 | Layer | Mission / instrument | Source |
 |---|---|---|
 | CTX global mosaic (~6 m/px) | MRO Context Camera | NASA Mars Trek WMTS (Caltech Murray Lab beta01 mosaic) |
 | MOLA colour hillshade (463 m/px) | MGS Mars Orbiter Laser Altimeter | NASA Mars Trek WMTS |
-| Elevation and **slope hazards** (>15°, >25°) | MGS MOLA MEGDR, 128 px/deg | PDS Geosciences Node (range-read, Gale only) |
+| Elevation and **slope hazards** (>15°, >25°) | MRO HiRISE stereo DEM of Gale, 1 m | NASA Mars Trek (`Gale_DEM_SMG_1m`) |
 | **Clay / sulfate** band-parameter strength | MRO CRISM MTRDR FRT0000A091 (D2300, SINDEX2, BD1900_2) | PDS Geosciences Node |
 | Hydrous mineral detections | MRO CRISM + Mars Express OMEGA | NASA Mars Trek |
 | Curiosity traverse, 1,389 waypoints, science sites | MSL Curiosity | NASA MMGIS (mars.nasa.gov/maps) |
+| **AI ground checks**: 319 Navcam images placed on the traverse | MSL Navcam + AI4Mars | site/drive in each filename, matched to MMGIS waypoints |
 
-**Route tool:** click waypoints and get distance, elevation profile, climb and descent, **slope
-risk**, how much of the walk follows ground Curiosity already drove (proven trafficable),
-**science stops** within 1.5 km, and an **estimated walking time** (3 km/h on flat ground,
-Tobler's slope penalty, plus 15 min per science stop).
+**HiRISE slope:** the 1 m DEM is sampled at 4 m (30 tiles from Trek's image server), slope is
+computed at that 4 m baseline, and the **steepest patch in each 20 m cell** is kept, so small
+scarps and crater walls stay visible. With MOLA's 463 m cells, only 4.4% of Gale was steeper
+than 15°. At HiRISE scale, 22% of 20 m cells in the DEM area contain a >15° patch and 6.6% a
+>25° patch.
+
+**Placing rover images on the map:** every Curiosity Navcam product ID carries the rover's
+location counter. For `NLB_537932733EDR_F0600888NCAM00320M1`, `F0600888` means site 060,
+drive 0888. The AI4Mars parquet files keep these filenames inside the image records, so all 322
+test images were recovered and matched to NASA MMGIS waypoints: 287 by exact site/drive, 30
+interpolated by drive number within the site, and 2 at the nearest waypoint of the site. 3 could
+not be placed because their site is not in the waypoint list. Cross-check: the sol implied by
+each image's spacecraft clock falls inside the sol range of its matched site. The result is
+**319 images at 89 rover stops** (sols 127–2434). Each one carries the AI's near-field
+soil/bedrock/sand/big-rock fractions and the experts' labels, which differ by 9.7 points of
+sand on average.
+**Route tool:** click waypoints and get:
+- distance, elevation profile, climb and descent;
+- **slope risk** from HiRISE: the share of the route crossing >15° and >25° cells;
+- **AI sand risk** from every geolocated Navcam image within 50 m of the route;
+- how much of the walk follows ground Curiosity already drove (proven trafficable);
+- **science stops** within 1.5 km;
+- an **estimated walking time** (3 km/h on flat ground, Tobler's slope penalty, plus 15 min per
+  science stop).
 
 **2. AI Ground Check**: for the last-metre question orbital data cannot answer ("is *this* patch
 sand?"). Upload a rover Navcam image and the model colours every part as **soil / bedrock / sand /
@@ -97,14 +118,17 @@ fields, which get read as bedrock or big rock.
 - **Big rocks are rare** (0.9% of training pixels, 0.1–0.2% of test pixels). Recall is high but
   precision is low (0.11–0.26): the model over-calls big rocks, so the planner is conservative, not
   blind.
-- **Slope comes from 463 m MOLA cells.** It finds crater walls and mound flanks but averages out
-  boulders, scarps and small craters. A real Marswalk needs HiRISE-scale (1 m) slopes.
+- **Slope covers the HiRISE DEM area only** (137.12–137.73°E, 4.25–4.93°S, around Curiosity's
+  traverse). Routes leaving it are refused rather than assessed with coarser data. Each 20 m cell
+  keeps its steepest 4 m patch, so a flagged cell may be mostly walkable. Mosaic seams in the DEM
+  can create false steep lines.
 - **CRISM layers show band-parameter strength from one observation** (FRT0000A091, lower Mount
   Sharp), not confirmed mineral maps. The clay signal in that cube is weak. Orbital hydrous
   detections are given only to 0.1°.
-- **AI sand risk is not on the map.** The AI works on rover images, and the AI4Mars images used here
-  carry no location, so they appear as a *ground-truth gallery from Curiosity's route* rather than
-  as geolocated markers. The map instead reports how much of a route follows Curiosity's proven path.
+- **AI sand risk exists only where Curiosity took a test-set image** (319 images, 89 stops). Markers
+  sit at the rover's position, and the terrain seen is within ~30 m of it. 32 positions are
+  interpolated by drive number, so they are approximate. Routes away from the traverse get "unknown"
+  for sand.
 - **The image route is a camera-view preview** (lower 60% of the frame, where labels exist), not
   distances in metres.
 - **Walk time** is a planning estimate (Tobler's function rescaled to 3 km/h), not a validated EVA
@@ -126,8 +150,9 @@ python src/data.py          # stream AI4Mars, clean masks, previews, class count
 python src/features.py      # DINOv2 features (cached, resumable)
 python src/train.py         # LogReg vs LightGBM, chosen by val mIoU
 python src/evaluate.py      # test metrics, baseline, confusion matrix, examples
-python src/make_samples.py  # demo samples + analysed gallery
-python src/geo.py           # Gale map layers from Mars Trek, PDS and MMGIS
+python src/make_samples.py  # 8 demo samples for the AI tab
+python src/geo.py           # Gale layers: HiRISE slope, CRISM, traverse (Mars Trek, PDS, MMGIS)
+python src/geolocate.py     # place AI4Mars test images by site/drive + AI results
 pytest -q                   # planner, data and feature tests
 ```
 
@@ -143,13 +168,15 @@ src/evaluate.py     pixel metrics, baseline, confusion matrix, examples
 src/planner.py      image cost map + 8-direction A*
 src/briefing.py     drive briefing text
 src/geo.py          builds geo/ layers from NASA sources
-src/marswalk.py     map route analysis (slope, stops, proven ground, walk time)
+src/geolocate.py    site/drive from Navcam filenames -> positions + AI results
+src/marswalk.py     map route analysis (HiRISE slope, AI sand, stops, proven ground, walk time)
 tests/              pytest
 ```
 
 ## Credits
 
 Data: NASA/JPL-Caltech **AI4Mars**; **NASA Mars Trek** (CTX mosaic: NASA/JPL/MSSS, Caltech Murray
-Lab; MOLA: NASA/JPL/GSFC; CRISM/OMEGA hydrous detections); **PDS Geosciences Node** (MOLA MEGDR,
-CRISM MTRDR); **NASA MMGIS** (Curiosity traverse, waypoints, science sites).
+Lab; MOLA: NASA/JPL/GSFC; HiRISE Gale DEM: NASA/JPL/University of Arizona; CRISM/OMEGA hydrous
+detections); **PDS Geosciences Node** (CRISM MTRDR); **NASA MMGIS** (Curiosity traverse, waypoints,
+science sites).
 Model: DINOv2 (Meta AI). Libraries: PyTorch, Transformers, scikit-learn, LightGBM, Gradio, Leaflet.
