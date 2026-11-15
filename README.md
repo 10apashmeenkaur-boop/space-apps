@@ -6,8 +6,8 @@
 | | |
 |---|---|
 | **Code** | https://github.com/10apashmeenkaur-boop/space-apps |
-| **Demo video (30 s)** | `<add link>` |
-| **Presentation** | `docs/Marswalk_Planner.pdf` |
+| **Demo (4-slide deck)** | [docs/Marswalk_Planner.pdf](docs/Marswalk_Planner.pdf) |
+| **Live demo (web version)** | `<add Vercel link>`: map, layers, route planner and AI photo markers run in the browser; AI tab shows precomputed results |
 | **Run it yourself** | ~5 min on any laptop, no GPU: see [How to run](#how-to-run) |
 
 The challenge asks for *a layered, integrated view of a location or route on the Martian surface
@@ -28,21 +28,6 @@ baseline; sand recall 96.3% vs 0%.** Runs on a laptop CPU.
   science stops and walking time.
 - **Proof:** the AI was trained on NASA/JPL's labelled rover photos and tested on NASA's own expert
   test set, which it never saw. It catches 96% of the sand. 16/16 automated tests pass.
-
-## Project status (submission day, 15 Nov 2026)
-
-| | Status |
-|---|---|
-| Map tab: CTX, MOLA, HiRISE 1 m slope, CRISM/OMEGA, Curiosity traverse + science stops | ✅ done, tested |
-| 319 AI-checked Curiosity photos placed on the map (site/drive from filenames) | ✅ done, tested |
-| Route tool: distance, climb, slope risk per leg (HiRISE / MOLA), AI sand/rock risk, science stops, walk time | ✅ done, tested |
-| AI Ground Check tab: terrain map, safe path, GO / CAUTION / HOLD | ✅ done, tested |
-| Evaluation on NASA's official AI4Mars test set + baseline | ✅ done (`results/metrics.json`) |
-| Unfamiliar-terrain check | ⚠️ tested as an experiment, not in the app yet |
-| Automated tests | ✅ 16/16 pass; app also verified from a clean clone without `data/` |
-| Presentation | ✅ `docs/Marswalk_Planner.pptx` / `.pdf` |
-| Live hosted demo | ❌ not hosted: free Hugging Face hosting no longer covers Gradio apps. Run it locally (5 min) or watch the demo video. |
-| Demo video | ⏳ link to be added above |
 
 ## Demo: what to click
 
@@ -104,7 +89,6 @@ each image's spacecraft clock falls inside the sol range of its matched site. Th
 **319 images at 89 rover stops** (sols 127–2434). Each one carries the AI's near-field
 soil/bedrock/sand/big-rock fractions and the experts' labels, which differ by 9.7 points of
 sand on average.
-
 **Route tool:** click waypoints and get:
 - distance, elevation profile, climb and descent;
 - **slope risk**: the share of the route crossing >15° and >25° cells. HiRISE is used inside its box
@@ -246,17 +230,55 @@ mostly reacts to rover hardware, shadows and sky. We report this as is.
 
 ## Tech stack
 
-| Layer | Tools |
+| Part | Tools |
 |---|---|
-| Frontend | Gradio (tabs, upload, results), Leaflet (interactive map, routes, popups), HTML/CSS/JS |
-| Backend | Python 3.11, NumPy, A* path planning |
-| AI | DINOv2-small (Meta, frozen features) + LightGBM (trained by us), PyTorch, Transformers, scikit-learn |
-| Data | NASA/JPL AI4Mars (Hugging Face), NASA Mars Trek (CTX, HiRISE DEM, MOLA, CRISM/OMEGA), PDS Geosciences Node, NASA MMGIS |
-| Quality | pytest (16/16 pass), clean-clone run test, pixel-hash leakage check |
+| Full app (local) | Python 3.11, **Gradio** (tabs, upload, results), **Leaflet** map inside Gradio, HTML/CSS/JS |
+| Web version (`web/`, free hosting) | Plain HTML + JavaScript + Leaflet; `web/marswalk.js` is a line-by-line port of the Python route engine; data precomputed by `src/build_static.py` |
+| AI | **DINOv2-small** (Meta, frozen features) + **LightGBM** (trained by us), PyTorch (CPU), Hugging Face Transformers, scikit-learn |
+| Planning | A* path planner on a probability cost map (rover photos); great-circle route sampling on HiRISE / MOLA grids (map); Tobler walking-speed rule |
+| Geodata | NumPy, Pillow, OpenCV; tiles in the Mars 2000 geographic grid (EPSG:104905) |
+| Testing | pytest (17 tests), Node.js for the JS-vs-Python check, a Python audit hook for runtime files |
+| Hosting | Vercel (static, free) for `web/`; the full Gradio app runs locally |
 
-## Use of AI tools
+## Data sources and how we verified them
 
-AI coding assistance (Claude Code) was used while building this project.
+| Data | Where it comes from | How we checked it |
+|---|---|---|
+| AI4Mars labels + Curiosity Navcam photos | NASA/JPL-Caltech, via Hugging Face `hassanjbara/AI4MARS` (CC0-1.0) | Mask values asserted ⊆ {0,1,2,3,255}; rover and >30 m pixels masked; previews checked by eye; every image hashed so no test image is in training |
+| CTX global mosaic (~6 m) | NASA Mars Trek WMTS → Esri OnMars CTX service | `WMTSCapabilities.xml` read for the tile grid; a real tile over Gale downloaded and viewed |
+| MOLA colour hillshade (463 m) | NASA Mars Trek WMTS | Same: capabilities read, Gale tile downloaded and viewed (crater + Mount Sharp visible) |
+| HiRISE 1 m Gale DEM | NASA Mars Trek ImageServer `Gale_DEM_SMG_1m` (catalogue: "MRO HiRISE, Gale Crater DEM") | Extent and pixel size read from the service; overview hillshade checked by eye; 30 tiles downloaded with retries |
+| MOLA MEGDR elevation (fallback) | PDS Geosciences Node, `megt00n090hb.img` | PDS label read (128 px/deg, big-endian int16); only the Gale rows range-read; elevations −4,648 to +1,412 m |
+| CRISM FRT0000A091 (clay / sulfate) | PDS Geosciences Node, MTRDR summary parameters | PDS label read (band order, map projection); value ranges printed; labelled as "strength", not a mineral map |
+| CRISM + OMEGA hydrous detections | NASA Mars Trek map service | Queried for the Gale window: 7 points (2 CRISM, 5 OMEGA), 0.1° precision |
+| Curiosity traverse, 1,389 waypoints, science sites | NASA MMGIS (`mars.nasa.gov/mmgis-maps/MSL/...`) | Our filename decoding checked against it: site/drive 55_940 → sol 1384 (lat −4.682396, lon 137.357345); 76_568 → sol 2434; 73_2958 → sol 2311, all exact |
+| Perseverance Navcam (novelty test only) | NASA raw-image JSON feed `mars.nasa.gov/rss/api/?feed=raw_images&category=mars2020...` | Image URLs saved in `results/perseverance_images.json` |
+
+**Facts quoted in the presentation, checked against primary sources:**
+- Spirit "became stuck in soft soil" on 1 May 2009 (NASA Science, Spirit mission page).
+- One-way Earth–Mars signal "anywhere from 4 minutes to 22 minutes" (JPL "On a Mission" podcast, rover driver Vandi Verma).
+- Curiosity RAD measured 0.67 mSv/day on the surface, Aug 2012–Jun 2013 (SwRI press release, RAD team).
+- DeepLabv3 "over 96% overall classification accuracy" (AI4Mars paper, CVPR 2021 Workshops).
+- SPOCv2 "Total Accuracy: 91.41%" (Zooniverse AI4Mars results page).
+
+## Tests and checks we ran
+
+**Automated tests (`pytest -q`): 17/17 pass.**
+
+| Test file | What it checks |
+|---|---|
+| `tests/test_planner.py` (5) | Open field gives a straight route; a rock wall forces a detour; a fully blocked field returns "no route" and HOLD; a goal outside the near field is refused; sand raises cost and is reported on the right side |
+| `tests/test_data.py` (6) | RGB masks use channel 0, and rover / far-range pixels are masked; bad label values are rejected; image ids are content hashes; the cell majority-label and ≥60% rule; class-balanced sampling keeps rare big rock; probabilities upsample to 1024×1024 |
+| `tests/test_geo.py` (5) | Navcam filename parsing (`F0600888` → site 60, drive 888); exact and interpolated waypoint lookup; a HiRISE-only route (distance, legs, AI photos sorted by distance, Kimberley found); a route leaving HiRISE falls back to MOLA and is labelled "mixed"; a route outside Gale is refused |
+| `tests/test_web_parity.py` (1) | The browser version (`web/marswalk.js`, run in Node) gives the same distance, climb, slope shares, risk, AI photo count, stop count and leg sources as the Python version, on two routes |
+
+**Other checks:**
+- **No data leakage:** pixel-hash ids; asserted that no test image is in train or validation.
+- **Official test set only:** final numbers come only from AI4Mars `test_min1/2/3` (322 expert-labelled images), with a majority-class baseline.
+- **Model choice by validation, not test:** LightGBM val mIoU 0.746 vs Logistic Regression 0.697.
+- **Clean-clone run:** fresh `git clone`, no `data/` folder. Every code path ran; the server answered HTTP 200 and ran an AI check in 2.3 s.
+- **Browser check of the web version:** example route report identical to the app; 97 map markers; 8 AI result cards and the metrics table load; no console errors.
+- **Speed:** ~0.5 s of model time per image on a laptop CPU (i5-12450H); ~2 s end to end.
 
 ## Repo layout
 
@@ -273,6 +295,8 @@ src/geo.py          builds geo/ layers from NASA sources
 src/geolocate.py    site/drive from Navcam filenames -> positions + AI results
 src/marswalk.py     map route analysis (HiRISE slope, AI sand, stops, proven ground, walk time)
 src/novelty.py      unfamiliar-terrain (kNN novelty) check + experiments
+src/build_static.py builds the static web version into web/
+web/                static web version (deploy this folder)
 docs/               presentation (PPTX + PDF)
 tests/              pytest
 ```
@@ -297,6 +321,14 @@ with **no `data/` folder** and `SANDTRAP_DATA` pointing at a folder that does no
 Nothing is read from `data/`, which holds only build-time caches (dataset images, features, DEM
 tiles). It is excluded from git. The clean-copy server answered
 HTTP 200 and ran an AI ground check through the Gradio API in 2.3 s.
+
+## Deploy the web version (Vercel, free)
+
+1. Go to vercel.com → **Add New… → Project** → import the GitHub repo `space-apps`.
+2. Set **Root Directory** to `web`, **Framework Preset** to *Other*, and leave the build command empty.
+3. Press **Deploy**. Vercel gives a `https://….vercel.app` link: put it in the table at the top.
+
+To rebuild `web/` after changing data: `python src/build_static.py`.
 
 ## Licences
 
