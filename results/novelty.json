@@ -1,0 +1,25 @@
+{
+  "method": "kNN (k=10) mean distance on L2-normalised DINOv2-small patch features; threshold = p99 of held-out validation patches",
+  "a_hidden_class": {
+    "auroc_bigrock_hidden": 0.9637381677938294,
+    "auroc_normal_reference": 0.9559087476414033,
+    "threshold_bigrock_hidden": 0.8703266382217407,
+    "flagged_bigrock_pixels": 0.6888465597570079,
+    "flagged_other_pixels": 0.016421748556736004,
+    "bigrock_pixels": 77698,
+    "other_pixels": 116901863,
+    "test_images": 322
+  },
+  "b_perseverance": {
+    "feed": "https://mars.nasa.gov/rss/api/?feed=raw_images&category=mars2020&feedtype=json&num=100&page=0&order=sol+desc&search=NAVCAM_LEFT",
+    "n_perseverance": 26,
+    "perseverance_unknown_mean": 0.1399864783653846,
+    "perseverance_unknown_median": 0.0322265625,
+    "curiosity_test_unknown_mean": 0.2058696865295031,
+    "curiosity_test_unknown_median": 0.1591796875,
+    "n_curiosity": 322,
+    "perseverance_unknown_near_field_mean": 0.15540865384615385,
+    "curiosity_test_unknown_near_field_mean": 0.25666246118012426,
+    "note": "Perseverance frames centre-cropped to square and converted to grey; different camera and site."
+  }
+}

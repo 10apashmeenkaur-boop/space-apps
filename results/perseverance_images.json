@@ -1,0 +1,262 @@
+[
+ {
+  "imageid": "NLF_2023_0846549056_005ECM_N0930000NCAM00709_02_095J",
+  "sol": 2023,
+  "site": 93,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02023/ids/edr/browse/ncam/NLF_2023_0846549056_005ECM_N0930000NCAM00709_02_095J01.png",
+  "mastEl": -45.1073,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.2822265625,
+  "unknown_frac_near_field": 0.2359375
+ },
+ {
+  "imageid": "NLF_2023_0846549056_005ECM_N0930000NCAM00709_06_095J",
+  "sol": 2023,
+  "site": 93,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02023/ids/edr/browse/ncam/NLF_2023_0846549056_005ECM_N0930000NCAM00709_06_095J01.png",
+  "mastEl": -45.1073,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.244140625,
+  "unknown_frac_near_field": 0.2703125
+ },
+ {
+  "imageid": "NLF_2023_0846549056_005ECM_N0930000NCAM00709_07_095J",
+  "sol": 2023,
+  "site": 93,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02023/ids/edr/browse/ncam/NLF_2023_0846549056_005ECM_N0930000NCAM00709_07_095J01.png",
+  "mastEl": -45.1073,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.052734375,
+  "unknown_frac_near_field": 0.053125
+ },
+ {
+  "imageid": "NLG_2022_0846456749_879ECM_N0930000SCAM04022_00_1LLJ",
+  "sol": 2022,
+  "site": 93,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02022/ids/edr/browse/ncam/NLG_2022_0846456749_879ECM_N0930000SCAM04022_00_1LLJ01.png",
+  "mastEl": -26.1042,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.0,
+  "unknown_frac_near_field": 0.0
+ },
+ {
+  "imageid": "NLF_2022_0846447080_692ECM_N0930000NCAM00709_07_090J",
+  "sol": 2022,
+  "site": 93,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02022/ids/edr/browse/ncam/NLF_2022_0846447080_692ECM_N0930000NCAM00709_07_090J01.png",
+  "mastEl": -45.1167,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.0166015625,
+  "unknown_frac_near_field": 0.0109375
+ },
+ {
+  "imageid": "NLF_2022_0846447080_692ECM_N0930000NCAM00709_08_090J",
+  "sol": 2022,
+  "site": 93,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02022/ids/edr/browse/ncam/NLF_2022_0846447080_692ECM_N0930000NCAM00709_08_090J01.png",
+  "mastEl": -45.1167,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.669921875,
+  "unknown_frac_near_field": 0.6203125
+ },
+ {
+  "imageid": "NLF_2018_0846090470_395ECM_N0920000NCAM00709_03_095J",
+  "sol": 2018,
+  "site": 92,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02018/ids/edr/browse/ncam/NLF_2018_0846090470_395ECM_N0920000NCAM00709_03_095J01.png",
+  "mastEl": -45.3187,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.2197265625,
+  "unknown_frac_near_field": 0.30625
+ },
+ {
+  "imageid": "NLF_2018_0846090470_395ECM_N0920000NCAM00709_01_095J",
+  "sol": 2018,
+  "site": 92,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02018/ids/edr/browse/ncam/NLF_2018_0846090470_395ECM_N0920000NCAM00709_01_095J01.png",
+  "mastEl": -45.3187,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.0478515625,
+  "unknown_frac_near_field": 0.05625
+ },
+ {
+  "imageid": "NLF_2018_0846090470_395ECM_N0920000NCAM00709_02_095J",
+  "sol": 2018,
+  "site": 92,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02018/ids/edr/browse/ncam/NLF_2018_0846090470_395ECM_N0920000NCAM00709_02_095J01.png",
+  "mastEl": -45.3187,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.0048828125,
+  "unknown_frac_near_field": 0.0046875
+ },
+ {
+  "imageid": "NLF_2011_0845478854_034ECM_N0920000NCAM00709_01_095J",
+  "sol": 2011,
+  "site": 92,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02011/ids/edr/browse/ncam/NLF_2011_0845478854_034ECM_N0920000NCAM00709_01_095J01.png",
+  "mastEl": -45.1085,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.0966796875,
+  "unknown_frac_near_field": 0.0796875
+ },
+ {
+  "imageid": "NLF_2011_0845478854_034ECM_N0920000NCAM00709_03_095J",
+  "sol": 2011,
+  "site": 92,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02011/ids/edr/browse/ncam/NLF_2011_0845478854_034ECM_N0920000NCAM00709_03_095J01.png",
+  "mastEl": -45.1085,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.1845703125,
+  "unknown_frac_near_field": 0.275
+ },
+ {
+  "imageid": "NLF_2011_0845478854_034ECM_N0920000NCAM00709_04_095J",
+  "sol": 2011,
+  "site": 92,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02011/ids/edr/browse/ncam/NLF_2011_0845478854_034ECM_N0920000NCAM00709_04_095J01.png",
+  "mastEl": -45.1085,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.05078125,
+  "unknown_frac_near_field": 0.0671875
+ },
+ {
+  "imageid": "NLF_2010_0845369681_035EBY_N0920000SCAM02010_00_0LLJ",
+  "sol": 2010,
+  "site": 92,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02010/ids/edr/browse/ncam/NLF_2010_0845369681_035EBY_N0920000SCAM02010_00_0LLJ01.png",
+  "mastEl": -29.4936,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.009765625,
+  "unknown_frac_near_field": 0.015625
+ },
+ {
+  "imageid": "NLE_2010_0845369681_035ECM_N0920000SCAM02010_00_0LLJ",
+  "sol": 2010,
+  "site": 92,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02010/ids/edr/browse/ncam/NLE_2010_0845369681_035ECM_N0920000SCAM02010_00_0LLJ01.png",
+  "mastEl": -29.4936,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.0087890625,
+  "unknown_frac_near_field": 0.0140625
+ },
+ {
+  "imageid": "NLF_2010_0845366567_699EBY_N0920000SCAM01010_00_0LLJ",
+  "sol": 2010,
+  "site": 92,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02010/ids/edr/browse/ncam/NLF_2010_0845366567_699EBY_N0920000SCAM01010_00_0LLJ01.png",
+  "mastEl": -26.8266,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.0029296875,
+  "unknown_frac_near_field": 0.0046875
+ },
+ {
+  "imageid": "NLG_2009_0845301532_022ECM_N0920000SCAM05009_00_1LLJ",
+  "sol": 2009,
+  "site": 92,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02009/ids/edr/browse/ncam/NLG_2009_0845301532_022ECM_N0920000SCAM05009_00_1LLJ01.png",
+  "mastEl": -20.0966,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.0107421875,
+  "unknown_frac_near_field": 0.0125
+ },
+ {
+  "imageid": "NLF_2009_0845299578_112ECM_N0920000NCAM00709_02_095J",
+  "sol": 2009,
+  "site": 92,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02009/ids/edr/browse/ncam/NLF_2009_0845299578_112ECM_N0920000NCAM00709_02_095J01.png",
+  "mastEl": -45.3211,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.0146484375,
+  "unknown_frac_near_field": 0.015625
+ },
+ {
+  "imageid": "NLF_2009_0845299578_112ECM_N0920000NCAM00709_03_095J",
+  "sol": 2009,
+  "site": 92,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02009/ids/edr/browse/ncam/NLF_2009_0845299578_112ECM_N0920000NCAM00709_03_095J01.png",
+  "mastEl": -45.3211,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.6162109375,
+  "unknown_frac_near_field": 0.7921875
+ },
+ {
+  "imageid": "NLF_2008_0845209226_972ECM_N0911496NCAM00709_01_095J",
+  "sol": 2008,
+  "site": 91,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02008/ids/edr/browse/ncam/NLF_2008_0845209226_972ECM_N0911496NCAM00709_01_095J02.png",
+  "mastEl": -45.1096,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.001953125,
+  "unknown_frac_near_field": 0.0015625
+ },
+ {
+  "imageid": "NLF_2008_0845209226_972ECM_N0911496NCAM00709_02_095J",
+  "sol": 2008,
+  "site": 91,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02008/ids/edr/browse/ncam/NLF_2008_0845209226_972ECM_N0911496NCAM00709_02_095J01.png",
+  "mastEl": -45.1096,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.0009765625,
+  "unknown_frac_near_field": 0.0
+ },
+ {
+  "imageid": "NLF_2008_0845209226_972ECM_N0911496NCAM00709_03_095J",
+  "sol": 2008,
+  "site": 91,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02008/ids/edr/browse/ncam/NLF_2008_0845209226_972ECM_N0911496NCAM00709_03_095J01.png",
+  "mastEl": -45.1096,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.1591796875,
+  "unknown_frac_near_field": 0.2515625
+ },
+ {
+  "imageid": "NLF_2007_0845104042_522EBY_N0911496SCAM01007_00_0LLJ",
+  "sol": 2007,
+  "site": 91,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02007/ids/edr/browse/ncam/NLF_2007_0845104042_522EBY_N0911496SCAM01007_00_0LLJ01.png",
+  "mastEl": -29.1405,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.0009765625,
+  "unknown_frac_near_field": 0.0
+ },
+ {
+  "imageid": "NLE_2007_0845104042_522ECM_N0911496SCAM01007_00_0LLJ",
+  "sol": 2007,
+  "site": 91,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02007/ids/edr/browse/ncam/NLE_2007_0845104042_522ECM_N0911496SCAM01007_00_0LLJ01.png",
+  "mastEl": -29.1405,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.0009765625,
+  "unknown_frac_near_field": 0.0
+ },
+ {
+  "imageid": "NLG_2006_0845031560_613ECM_N0911496SCAM04006_00_1LLJ",
+  "sol": 2006,
+  "site": 91,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02006/ids/edr/browse/ncam/NLG_2006_0845031560_613ECM_N0911496SCAM04006_00_1LLJ01.png",
+  "mastEl": -25.9005,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.0009765625,
+  "unknown_frac_near_field": 0.0
+ },
+ {
+  "imageid": "NLF_2006_0845029179_723ECM_N0911496NCAM00709_05_095J",
+  "sol": 2006,
+  "site": 91,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02006/ids/edr/browse/ncam/NLF_2006_0845029179_723ECM_N0911496NCAM00709_05_095J01.png",
+  "mastEl": -45.2578,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.0908203125,
+  "unknown_frac_near_field": 0.1171875
+ },
+ {
+  "imageid": "NLF_2006_0845029179_723ECM_N0911496NCAM00709_09_095J",
+  "sol": 2006,
+  "site": 91,
+  "url": "https://mars.nasa.gov/mars2020-raw-images/pub/ods/surface/sol/02006/ids/edr/browse/ncam/NLF_2006_0845029179_723ECM_N0911496NCAM00709_09_095J01.png",
+  "mastEl": -45.2578,
+  "credit": "NASA/JPL-Caltech",
+  "unknown_frac": 0.8505859375,
+  "unknown_frac_near_field": 0.8359375
+ }
+]
