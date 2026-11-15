@@ -1,16 +1,3 @@
----
-title: Marswalk Planner - Gale Crater
-emoji: 🛰️
-colorFrom: red
-colorTo: yellow
-sdk: gradio
-sdk_version: 6.32.0
-python_version: "3.11"
-app_file: app.py
-pinned: false
-short_description: Layered Marswalk planner for Gale Crater + AI ground check
----
-
 # Marswalk Planner: Gale Crater, with an AI ground-check layer
 
 **NASA Space Apps 2026, Challenge #10: Interplanetary Survival Guide: Martian Map.**
@@ -18,7 +5,7 @@ The challenge asks for *a layered, integrated view of a location or route on the
 that pulls together data from multiple NASA science missions and could help a human explorer plan
 and carry out a successful Marswalk while doing new and exciting science along the way.*
 
-Live demo: `<add Hugging Face Space link>` · Video: `<add link>`
+Demo video (30 s): `<add link>` · Run it yourself in about 5 minutes on any laptop (no GPU): see [How to run](#how-to-run).
 
 **AI ground check, official AI4Mars test set (`test_min3`): mIoU 0.777 vs 0.056 for a majority-class
 baseline; sand recall 96.3% vs 0%.** Runs on a laptop CPU (~0.5 s per image).
@@ -147,11 +134,18 @@ fields, which get read as bedrock or big rock.
 
 ## How to run
 
+Needs Python 3.11 and about 2 GB of disk; no GPU.
+
 ```bash
+git clone <this repo's URL> marswalk-planner && cd marswalk-planner
 python -m venv .venv && . .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-python app.py                                         # http://127.0.0.1:7860
+pip install -r requirements.txt                       # CPU-only PyTorch, ~5 min
+python app.py                                         # open http://127.0.0.1:7860
 ```
+
+The first start downloads the DINOv2-small weights (~90 MB) from Hugging Face; after that the
+app works offline except for the map tiles (NASA Mars Trek). Try **★ Example route** on the map,
+click a coloured rover-photo marker, and pick a sample in the **AI Ground Check** tab.
 
 The repo ships everything the app needs (`models/`, `geo/`, `samples/`, `results/`). To rebuild
 from scratch (about 45 min on a laptop CPU; heavy files go to `SANDTRAP_DATA`, default `data/`):
@@ -202,7 +196,7 @@ with **no `data/` folder** and `SANDTRAP_DATA` pointing at a folder that does no
 | `facebook/dinov2-small` | downloaded from the Hugging Face Hub on first start |
 
 Nothing is read from `data/`, which holds only build-time caches (dataset images, features, DEM
-tiles). It is excluded from git and from the Space upload. The clean-copy server answered
+tiles). It is excluded from git. The clean-copy server answered
 HTTP 200 and ran an AI ground check through the Gradio API in 2.3 s.
 
 ## Licences
