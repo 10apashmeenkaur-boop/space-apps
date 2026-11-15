@@ -1,7 +1,7 @@
 """Build the Gale Crater map layers from official NASA sources into geo/ (small, committed files).
 
 Sources (all verified live):
-  MOLA MEGDR 128 px/deg   PDS Geosciences  megt00n090hb.img (range-read Gale rows only)
+  HiRISE Gale DEM (1 m)   NASA Mars Trek   Gale_DEM_SMG_1m ImageServer (slope at a 4 m baseline)
   CRISM MTRDR summary     PDS Geosciences  FRT0000A091_07_SU165J_MTR3 (bands D2300, SINDEX2, BD1900_2)
   CRISM/OMEGA detections  NASA Mars Trek   Hydrous_Mineral_Detections_OMEGA_CRISM_clon0
   Curiosity traverse      NASA MMGIS       MSL_traverse.json, MSL_waypoints.json, MSL_SurfaceSites.json
@@ -13,6 +13,7 @@ import io
 import json
 import math
 import sys
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -27,9 +28,6 @@ MARS_R = 3396190.0  # m, IAU Mars 2000 sphere
 
 # Gale Crater window (deg). Crater centre ~5.4S 137.8E, Curiosity area ~4.6-4.9S 137.4E.
 LAT_N, LAT_S, LON_W, LON_E = -3.0, -7.5, 135.5, 140.0
-
-MEGDR = ("https://pds-geosciences.wustl.edu/mgs/mgs-m-mola-5-megdr-l3-v1/mgsl_300x/meg128/megt00n090hb.img")
-MEGDR_PPD, MEGDR_COLS, MEGDR_TOP, MEGDR_WEST = 128, 11520, 0.0, 90.0
 
 CRISM_ID = "FRT0000A091"
 CRISM_URL = ("https://pds-geosciences.wustl.edu/mro/mro-m-crism-5-rdr-mptargeted-v1/mrocr_4001/mtrdr/2008/"
@@ -46,12 +44,23 @@ MMGIS = "https://mars.nasa.gov/mmgis-maps/MSL/Layers/json/"
 UA = {"User-Agent": "sandtrap-geo/1.0"}
 
 
-def get(url, rng=None):
+def get(url, rng=None, tries=5):
+    """HTTP GET with retries (the Trek image server returns occasional 500/502s)."""
+    import time
+
     h = dict(UA)
     if rng:
         h["Range"] = f"bytes={rng[0]}-{rng[1]}"
-    with urllib.request.urlopen(urllib.request.Request(url, headers=h), timeout=120) as r:
-        data = r.read()
+    for k in range(tries):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=h), timeout=180) as r:
+                data = r.read()
+            break
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as ex:
+            if k == tries - 1:
+                raise
+            print(f"    retry {k + 1} after: {ex}", flush=True)
+            time.sleep(3 * (k + 1))
     if rng:
         assert len(data) == rng[1] - rng[0] + 1, f"range read failed: got {len(data)} bytes"
     return data
@@ -63,28 +72,68 @@ def png_data_url(rgba):
     return "data:image/png;base64," + base64.b64encode(b.getvalue()).decode()
 
 
-# ---------------- MOLA elevation + slope ----------------
-def build_mola():
-    r0 = int(round((MEGDR_TOP - LAT_N) * MEGDR_PPD))
-    r1 = int(round((MEGDR_TOP - LAT_S) * MEGDR_PPD))
-    c0 = int(round((LON_W - MEGDR_WEST) * MEGDR_PPD))
-    c1 = int(round((LON_E - MEGDR_WEST) * MEGDR_PPD))
-    row_bytes = MEGDR_COLS * 2
-    raw = get(MEGDR, (r0 * row_bytes, r1 * row_bytes - 1))
-    dem = np.frombuffer(raw, ">i2").reshape(r1 - r0, MEGDR_COLS)[:, c0:c1].astype(np.int16)
-    np.savez_compressed(GEO / "mola_dem.npz", dem=dem, bounds=np.array([LAT_S, LAT_N, LON_W, LON_E]))
-    print(f"MOLA DEM {dem.shape}, elevation {dem.min()}..{dem.max()} m")
-    return dem
+# ---------------- HiRISE 1 m DEM -> slope ----------------
+HIRISE_URL = "https://trek.nasa.gov/mars/trekarcgis/rest/services/Gale_DEM_SMG_1m/ImageServer/exportImage"
+HI_W, HI_E = 137.12247113204074, 137.72981290693286   # service extent (deg, Mars 2000 sphere)
+HI_S, HI_N = -4.925474311955841, -4.248963057145466
+HI_RES_M = 4.0        # slope baseline (m): sampled from the 1 m DEM with bilinear interpolation
+HI_POOL = 5           # store max slope / mean elevation per 5x5 block = 20 m cells
+HI_TILE = (2000, 2000)  # rows, cols per request (multiples of HI_POOL); larger tiles hit server errors
+M_PER_DEG = MARS_R * math.pi / 180
 
 
-def slope_deg(dem, lat_s, lat_n, ppd_lat, ppd_lon):
-    """Slope in degrees for an equirectangular grid (rows north->south)."""
-    h, w = dem.shape
-    lats = lat_n - (np.arange(h) + 0.5) / ppd_lat
-    dy = MARS_R * math.radians(1 / ppd_lat)
-    dx = (MARS_R * np.radians(1 / ppd_lon) * np.cos(np.radians(lats)))[:, None]
-    gy, gx = np.gradient(dem.astype(np.float64))
-    return np.degrees(np.arctan(np.hypot(gx / dx, gy / dy))).astype(np.float32)
+def hirise_grid():
+    lat0 = 0.5 * (HI_S + HI_N)
+    dlat = HI_RES_M / M_PER_DEG
+    dlon = HI_RES_M / (M_PER_DEG * math.cos(math.radians(lat0)))
+    nr = int((HI_N - HI_S) / dlat) // HI_POOL * HI_POOL
+    nc = int((HI_E - HI_W) / dlon) // HI_POOL * HI_POOL
+    return dlat, dlon, nr, nc
+
+
+def fetch_hirise_tile(r0, c0, h, w, dlat, dlon):
+    """DEM tile with a 1-pixel halo, cached under DATA_DIR/hirise_tiles."""
+    cache = C.DATA_DIR / "hirise_tiles" / f"r{r0}_c{c0}_{h}x{w}.npy"
+    if cache.exists():
+        return np.load(cache)
+    west, east = HI_W + (c0 - 1) * dlon, HI_W + (c0 + w + 1) * dlon
+    north, south = HI_N - (r0 - 1) * dlat, HI_N - (r0 + h + 1) * dlat
+    url = (f"{HIRISE_URL}?bbox={west},{south},{east},{north}&bboxSR=104905&imageSR=104905"
+           f"&size={w + 2},{h + 2}&format=tiff&pixelType=F32&interpolation=RSP_BilinearInterpolation&f=image")
+    a = np.array(Image.open(io.BytesIO(get(url))), dtype=np.float32)
+    assert a.shape == (h + 2, w + 2), a.shape
+    a[(a < -1e4) | (a > 1e4)] = np.nan
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    np.save(cache, a)
+    return a
+
+
+def build_hirise():
+    """Slope at a 4 m baseline from the HiRISE DEM, kept as max slope per 20 m cell."""
+    dlat, dlon, nr, nc = hirise_grid()
+    th, tw = HI_TILE
+    slope20 = np.zeros((nr // HI_POOL, nc // HI_POOL), np.float32)
+    elev20 = np.zeros_like(slope20)
+    tiles = [(r0, c0) for r0 in range(0, nr, th) for c0 in range(0, nc, tw)]
+    for i, (r0, c0) in enumerate(tiles, 1):
+        h, w = min(th, nr - r0), min(tw, nc - c0)
+        a = fetch_hirise_tile(r0, c0, h, w, dlat, dlon)
+        lats = HI_N - (r0 - 1 + np.arange(h + 2) + 0.5) * dlat
+        dx = (dlon * M_PER_DEG * np.cos(np.radians(lats)))[:, None]
+        gy, gx = np.gradient(a)
+        s = np.degrees(np.arctan(np.hypot(gx / dx, gy / HI_RES_M)))[1:-1, 1:-1]
+        z = a[1:-1, 1:-1]
+        p = HI_POOL
+        blk = lambda x: x.reshape(h // p, p, w // p, p)  # noqa: E731
+        slope20[r0 // p:(r0 + h) // p, c0 // p:(c0 + w) // p] = np.nan_to_num(np.nanmax(blk(s), axis=(1, 3)))
+        elev20[r0 // p:(r0 + h) // p, c0 // p:(c0 + w) // p] = np.nanmean(blk(z), axis=(1, 3))
+        print(f"  HiRISE tile {i}/{len(tiles)}  elev {np.nanmin(z):.0f}..{np.nanmax(z):.0f} m  "
+              f"max slope {np.nanmax(s):.1f} deg", flush=True)
+    cell = HI_RES_M * HI_POOL
+    np.savez_compressed(GEO / "hirise_dem20.npz", slope=np.clip(np.round(slope20), 0, 90).astype(np.uint8),
+                        elev=np.round(elev20).astype(np.int16),
+                        bounds=np.array([HI_N - nr * dlat, HI_N, HI_W, HI_W + nc * dlon]), cell_m=cell)
+    return slope20, (HI_N - nr * dlat, HI_N, HI_W, HI_W + nc * dlon)
 
 
 def slope_overlay(slope):
@@ -179,15 +228,12 @@ def main():
     GEO.mkdir(exist_ok=True)
     layers = {"window": {"south": LAT_S, "north": LAT_N, "west": LON_W, "east": LON_E}, "overlays": {}}
 
-    dem = build_mola()
-    slope = slope_deg(dem, LAT_S, LAT_N, MEGDR_PPD, MEGDR_PPD)
-    
-    print(f"MOLA slope: max {slope.max():.1f} deg, >15 deg {100 * (slope > 15).mean():.2f}%, "
-          f">25 deg {100 * (slope > 25).mean():.3f}%")
-    layers["overlays"]["slope"] = {"bounds": [[LAT_S, LON_W], [LAT_N, LON_E]],
-                                   "url": png_data_url(slope_overlay(slope)),
-                                   "stats": {"max": float(slope.max()), "gt15": float((slope > 15).mean()),
-                                             "gt25": float((slope > 25).mean())}}
+    slope, (bs, bn, bw, be) = build_hirise()
+    print(f"HiRISE slope (max per 20 m cell, 4 m baseline): >15 deg {100 * (slope > 15).mean():.2f}%, "
+          f">25 deg {100 * (slope > 25).mean():.2f}% of cells")
+    layers["overlays"]["slope"] = {"bounds": [[bs, bw], [bn, be]], "url": png_data_url(slope_overlay(slope)),
+                                   "source": "MRO HiRISE Gale DEM (1 m), NASA Mars Trek",
+                                   "stats": {"gt15": float((slope > 15).mean()), "gt25": float((slope > 25).mean())}}
 
     try:
         bands = build_crism()

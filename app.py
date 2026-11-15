@@ -20,7 +20,7 @@ from PIL import Image
 import config as C
 from src.briefing import make_briefing
 from src.infer import upsample
-from src.marswalk import analyse, layers, report_html
+from src.marswalk import ai_images, analyse, layers, report_html
 from src.planner import near_field_top, plan
 
 VIEW = 640
@@ -30,7 +30,6 @@ VERDICT_COLOR = {"GO": "#1f9d55", "GO WITH CAUTION": "#c27c0e", "HOLD": "#c53030
 METRICS_P = C.RESULTS_DIR / "metrics.json"
 METRICS = json.loads(METRICS_P.read_text()) if METRICS_P.exists() else None
 SAMPLES = sorted(str(p) for p in C.SAMPLES_DIR.glob("*.png"))
-GALLERY_P = C.SAMPLES_DIR / "analysed" / "index.json"
 _CACHE: "OrderedDict[str, np.ndarray]" = OrderedDict()
 
 
@@ -172,11 +171,24 @@ def ground_check(img, auto, tx, ty):
     return render_overlay(grey, prob, result), briefing_md(make_briefing(result), secs)
 
 
-def gallery_items():
-    if not GALLERY_P.exists():
-        return []
-    idx = json.loads(GALLERY_P.read_text())
-    return [(str(C.SAMPLES_DIR / "analysed" / e["file"]), e["caption"]) for e in idx]
+VERDICT_RANK = {"GO": 0, "GO WITH CAUTION": 1, "HOLD": 2}
+
+
+def ai_stops():
+    """Geolocated AI4Mars images grouped per rover stop (site/drive) for map markers."""
+    groups = {}
+    for im in ai_images():
+        groups.setdefault((im["site"], im["drive"]), []).append(im)
+    out = []
+    for (site, drive), ims in groups.items():
+        ex = [i["expert"]["sand"] for i in ims if i.get("expert")]
+        out.append({"site": site, "drive": drive, "lat": ims[0]["lat"], "lon": ims[0]["lon"],
+                    "loc": ims[0]["loc"], "sol": ims[0]["sol_min"], "sol_max": ims[0]["sol_max"],
+                    "n": len(ims), "ids": [i["id"] for i in ims],
+                    "sand": float(np.mean([i["ai"]["sand"] for i in ims])),
+                    "expert_sand": float(np.mean(ex)) if ex else None,
+                    "verdict": max((i["verdict"] for i in ims), key=VERDICT_RANK.get)})
+    return out
 
 
 # =====================================================================================
@@ -191,7 +203,31 @@ def get_layers(data=None):
     L = layers()
     wps = L["waypoints"]
     step = max(1, len(wps) // 120)
-    return {**L, "waypoints": wps[::step] + [wps[-1]]}
+    return {**L, "waypoints": wps[::step] + [wps[-1]], "ai_stops": ai_stops()}
+
+
+def ai_stop_html(data):
+    """Popup body for one rover stop: thumbnails (image | AI terrain map) and AI vs expert sand."""
+    import base64
+
+    args = _js_args(data)
+    ids = args[0] if args and isinstance(args[0], (list, tuple)) else args
+    by_id = {i["id"]: i for i in ai_images()}
+    parts = []
+    for iid in ids[:6]:
+        im = by_id.get(iid)
+        f = C.ROOT / "geo" / "ai_thumbs" / f"{iid}.jpg"
+        if not im or not f.exists():
+            continue
+        b64 = base64.b64encode(f.read_bytes()).decode()
+        ex = f"{im['expert']['sand']:.0%}" if im.get("expert") else "n/a"
+        parts.append(
+            f"<div style='margin:6px 0'><img src='data:image/jpeg;base64,{b64}' style='width:100%;border-radius:4px'>"
+            f"<div style='font-size:11px'><code>{im['file']}</code><br>"
+            f"<b style='color:{VERDICT_COLOR[im['verdict']]}'>{im['verdict']}</b> · near-field sand: AI "
+            f"<b>{im['ai']['sand']:.0%}</b>, experts <b>{ex}</b> · big rock AI {im['ai']['bigrock']:.0%}</div></div>")
+    more = f"<div style='font-size:11px'>+ {len(ids) - 6} more images at this stop</div>" if len(ids) > 6 else ""
+    return "".join(parts) + more
 
 
 def analyse_route(data):
@@ -263,8 +299,12 @@ const start = async () => {
   const data = await server.get_layers();
   const ov = data.overlays;
   const overlays = {'MOLA hillshade/elevation (tint)': molaOver};
-  if (ov.slope) overlays['Slope hazard (MOLA): orange >15°, red >25°'] =
-      L.imageOverlay(ov.slope.url, ov.slope.bounds, {opacity: 0.85}).addTo(map);
+  if (ov.slope) {
+    overlays['Slope hazard (HiRISE 1 m DEM): orange >15°, red >25°'] =
+      L.imageOverlay(ov.slope.url, ov.slope.bounds, {opacity: 0.8}).addTo(map);
+    overlays['HiRISE DEM coverage'] = L.rectangle(ov.slope.bounds,
+      {color: '#ffb347', weight: 1, fill: false, dashArray: '6 4'}).addTo(map);
+  }
   if (ov.crism_sulfate) overlays['CRISM polyhydrated sulfate strength (FRT0000A091)'] =
       L.imageOverlay(ov.crism_sulfate.url, ov.crism_sulfate.bounds).addTo(map);
   if (ov.crism_clay) overlays['CRISM Fe/Mg clay strength (FRT0000A091, weak)'] =
@@ -286,13 +326,41 @@ const start = async () => {
       .bindPopup(`<b>${s.name}</b><br>${s.kind}<br><small>${s.source}</small>`))).addTo(map);
   overlays['Science stops'] = sci;
 
+  // --- AI ground checks: AI4Mars Navcam images geolocated by site/drive in their filenames ---
+  const vcol = {'GO': '#1f9d55', 'GO WITH CAUTION': '#d69e2e', 'HOLD': '#c53030'};
+  const aiLayer = L.layerGroup((data.ai_stops || []).map(s => {
+    const m = L.circleMarker([s.lat, s.lon], {radius: 4 + Math.min(s.n, 8) * 0.6, color: '#111', weight: 1.5,
+      fillColor: vcol[s.verdict], fillOpacity: 0.95});
+    const sols = s.sol === s.sol_max ? `sol ${s.sol}` : `sols ${s.sol}-${s.sol_max}`;
+    const ex = s.expert_sand === null ? 'n/a' : Math.round(100 * s.expert_sand) + '%';
+    const head = `<b>AI ground check - site ${s.site}, drive ${s.drive}</b> (${sols})<br>` +
+      `${s.n} Navcam image${s.n > 1 ? 's' : ''} · position: ${s.loc}<br>` +
+      `near-field sand: AI <b>${Math.round(100 * s.sand)}%</b>, experts <b>${ex}</b> · worst verdict ` +
+      `<b style="color:${vcol[s.verdict]}">${s.verdict}</b>`;
+    m.bindPopup(head + '<div><i>Loading images...</i></div>',
+                {maxWidth: 380, minWidth: 340, maxHeight: 420, autoPanPaddingTopLeft: [180, 20]});
+    m.on('popupopen', async () => {
+      if (s.loading || s.html) return;  // fetch once per stop
+      s.loading = true;
+      try { s.html = await server.ai_stop_html(s.ids); }
+      catch (err) { s.html = '<div class="mw-err">Could not load images.</div>'; }
+      s.loading = false;
+      m.setPopupContent(head + s.html);
+    });
+    return m;
+  })).addTo(map);
+  overlays['AI ground checks (AI4Mars images on the traverse)'] = aiLayer;
+
   L.control.layers({'CTX mosaic (~6 m/px)': ctx, 'MOLA colour hillshade (463 m/px)': mola}, overlays,
       {collapsed: true}).addTo(map);
   L.control.scale({imperial: false}).addTo(map);
 
   const legend = L.control({position: 'bottomright'});
   legend.onAdd = () => { const d = L.DomUtil.create('div', 'mw-legend'); d.innerHTML =
-    '<i style="background:#ff9600"></i>slope &gt;15°<br><i style="background:#e61414"></i>slope &gt;25°<br>' +
+    '<i style="background:#ff9600"></i>slope &gt;15° <i style="background:#e61414"></i>&gt;25° (HiRISE)<br>' +
+    '<i style="background:#1f9d55;border-radius:50%"></i>AI GO ' +
+    '<i style="background:#d69e2e;border-radius:50%"></i>CAUTION ' +
+    '<i style="background:#c53030;border-radius:50%"></i>HOLD<br>' +
     '<i style="background:#ff00c8"></i>sulfate (CRISM)<br><i style="background:#2878ff"></i>clay (CRISM)<br>' +
     '<i style="background:#fff;border:1px solid #333"></i>Curiosity traverse<br>' +
     '<i style="background:#ecc94b;border-radius:50%"></i>science site ' +
@@ -344,26 +412,21 @@ CSS = ".gradio-container {max-width: 1360px !important}"
 with gr.Blocks(title="Marswalk Planner - Gale Crater") as demo:
     gr.Markdown(
         "# 🛰️ Marswalk Planner: Gale Crater\n"
-        "A layered view of Curiosity's field site from **multiple NASA missions**: MRO CTX imagery, MGS MOLA "
-        "topography and slope hazards, MRO CRISM / Mars Express OMEGA mineral signals, and Curiosity's own "
-        "traverse and science stops. Plan a walk on the map, then check the ground with the "
-        "**AI ground-check** model trained on NASA's AI4Mars rover images.")
+        "A layered view of Curiosity's field site from **multiple NASA missions**: MRO CTX imagery, "
+        "**MRO HiRISE 1 m slope hazards**, MGS MOLA topography, MRO CRISM / Mars Express OMEGA mineral signals, "
+        "Curiosity's traverse and science stops, and **319 AI ground checks of Curiosity Navcam images placed on "
+        "the traverse** by the site/drive in their filenames. Plan a walk on the map: the route report "
+        "combines slope, AI sand risk, science stops and walking time.")
 
     with gr.Tab("🗺️ Marswalk Map"):
         gr.HTML(value="", html_template=MAP_HTML, css_template=MAP_CSS, js_on_load=MAP_JS, head=LEAFLET_HEAD,
-                server_functions=[get_layers, analyse_route], apply_default_css=False)
-        with gr.Accordion("Ground-truth gallery from Curiosity's route (AI ground-check results)", open=True):
-            gr.Markdown(
-                "These are Curiosity Navcam images from the official AI4Mars expert test set, analysed by the "
-                "AI ground-check model. **They cannot be placed on the map:** the AI4Mars release used here "
-                "carries no image names, sols or coordinates, so we show them as a gallery of what the ground "
-                "along Curiosity's route looks like, rather than invent positions.")
-            items = gallery_items()
-            if items:
-                gr.Gallery(items, columns=4, height=420, object_fit="contain", allow_preview=True,
-                           label="Analysed AI4Mars test images")
-            else:
-                gr.Markdown("_Gallery not built yet: run `python src/make_samples.py`._")
+                server_functions=[get_layers, analyse_route, ai_stop_html], apply_default_css=False)
+        gr.Markdown(
+            "<small>**AI ground checks** are the 319 Curiosity Navcam images of the official AI4Mars expert test "
+            "set that could be placed: each filename (e.g. `NLB_537932733EDR_F0600888NCAM00320M1`) carries the "
+            "rover's site (060) and drive (0888), matched to NASA MMGIS waypoints - 287 exact, 32 interpolated "
+            "within the site. Markers sit at the rover position; the terrain shown is within ~30 m of it. "
+            "Click a marker to see each image, the AI terrain map and the experts' sand fraction.</small>")
 
     with gr.Tab("🔬 AI Ground Check"):
         gr.Markdown("Upload a rover Navcam image (or click a sample): the model maps **soil, bedrock, sand and "
@@ -425,24 +488,28 @@ with gr.Blocks(title="Marswalk Planner - Gale Crater") as demo:
             "| Layer | Mission / instrument | Source |\n|---|---|---|\n"
             "| CTX global mosaic (~6 m/px) | MRO Context Camera | NASA Mars Trek WMTS (Caltech Murray Lab beta01 mosaic) |\n"
             "| MOLA colour hillshade (463 m/px) | MGS Mars Orbiter Laser Altimeter | NASA Mars Trek WMTS |\n"
-            "| Elevation + slope (463 m/px) | MGS MOLA MEGDR 128 px/deg | PDS Geosciences Node |\n"
+            "| Elevation + slope hazards (1 m DEM, 4 m slope baseline, 20 m cells) | MRO HiRISE stereo DEM of Gale | NASA Mars Trek (Gale_DEM_SMG_1m) |\n"
             "| Clay / sulfate strength | MRO CRISM MTRDR FRT0000A091 (D2300, SINDEX2, BD1900_2) | PDS Geosciences Node |\n"
             "| Hydrous mineral detections | MRO CRISM + Mars Express OMEGA | NASA Mars Trek |\n"
             "| Traverse, waypoints, science sites | MSL Curiosity | NASA MMGIS (mars.nasa.gov/maps) |\n"
-            "| Terrain labels for the AI | MSL Curiosity Navcam | NASA/JPL-Caltech AI4Mars |\n\n"
+            "| Terrain labels for the AI | MSL Curiosity Navcam | NASA/JPL-Caltech AI4Mars |\n"
+            "| Image positions | site/drive in Navcam product IDs + MSL waypoints | AI4Mars filenames + NASA MMGIS |\n\n"
             "### Limits\n"
-            "- **Slope is from 463 m MOLA cells**: it finds crater walls and mound flanks but averages out "
-            "boulders, scarps and small craters. A real Marswalk needs HiRISE-scale (1 m) slopes.\n"
+            "- **Slope covers the HiRISE DEM area only** (137.12–137.73°E, 4.25–4.93°S, around Curiosity's "
+            "traverse). Slope is computed at a 4 m baseline and the steepest patch per 20 m cell is kept, so a "
+            "flagged cell may be mostly walkable. Mosaic seams in the DEM can create false steep lines.\n"
             "- **CRISM layers show band-parameter strength from one observation**, not confirmed mineral maps; "
             "the clay signal in FRT0000A091 is weak. Orbital detections are only given to 0.1°.\n"
-            "- **AI sand risk is not on the map**: the AI works on rover images, and the AI4Mars images carry "
-            "no locations. The map instead reports how much of a route follows ground Curiosity already drove.\n"
+            "- **AI sand risk exists only where Curiosity took a test-set image**: 319 images at 89 rover "
+            "stops along the traverse. Positions are the rover's, interpolated by drive number when the exact "
+            "drive is not a published waypoint (32 images); 3 images could not be placed.\n"
             "- **Walk time** assumes 3 km/h on flat ground with Tobler's slope penalty, plus 15 min per science "
             "stop. It is a planning estimate, not a validated EVA model.")
 
     gr.Markdown("<small>Data: NASA/JPL-Caltech AI4Mars; NASA Mars Trek (CTX, MOLA, CRISM/OMEGA); PDS Geosciences "
-                "Node (MOLA MEGDR, CRISM MTRDR); NASA MMGIS (Curiosity traverse). Model: DINOv2-small (Meta) + "
-                "scikit-learn / LightGBM. Routing: A* (images) and great-circle sampling on MOLA (map).</small>")
+                "Node (CRISM MTRDR); MRO HiRISE Gale DEM via NASA Mars Trek; NASA MMGIS (Curiosity traverse). "
+                "Model: DINOv2-small (Meta) + LightGBM. Routing: A* (images) and great-circle sampling on the "
+                "HiRISE DEM (map).</small>")
 
 if __name__ == "__main__":
     demo.queue(default_concurrency_limit=2).launch(css=CSS, theme=gr.themes.Soft())
