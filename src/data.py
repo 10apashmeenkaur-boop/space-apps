@@ -94,17 +94,49 @@ def load_mask(split, iid) -> np.ndarray:
     return np.load(mask_path(split, iid))["mask"]
 
 
+IMAGE_COLS = ["image", "label_mask", "rover_mask", "range_mask"]
+
+
 def _stream(split=None, data_files=None):
+    """Streaming dataset with image decoding turned off: we decode ourselves so that
+    one corrupt file skips a row instead of killing the run."""
+    from datasets import Image as HFImage
     from datasets import load_dataset
 
     if data_files:
-        return load_dataset(C.HF_DATASET, data_files={"train": data_files}, split="train", streaming=True)
-    return load_dataset(C.HF_DATASET, split=split, streaming=True)
+        ds = load_dataset(C.HF_DATASET, data_files={"train": data_files}, split="train", streaming=True)
+    else:
+        ds = load_dataset(C.HF_DATASET, split=split, streaming=True)
+    for col in IMAGE_COLS:
+        ds = ds.cast_column(col, HFImage(decode=False))
+    return ds
+
+
+def _decode(row):
+    """Decode the image columns of a row in place. Returns False if a required one is unreadable."""
+    import io
+
+    from PIL import Image
+
+    for col in IMAGE_COLS:
+        v = row.get(col)
+        if v is None:
+            continue
+        try:
+            img = Image.open(io.BytesIO(v["bytes"]) if v.get("bytes") else v["path"])
+            img.load()
+            row[col] = img
+        except Exception:  # noqa: BLE001 - any decode failure means the row is unusable
+            if col in ("image", "label_mask"):
+                return False
+            row[col] = None
+    return True
 
 
 def fetch_test_split(split):
     ids, counts = [], np.zeros(C.N_CLASSES, np.int64)
     for row in _stream(split=split):
+        assert _decode(row), f"unreadable image in {split}"
         grey = to_grey(row["image"])
         mask = clean_mask(row["label_mask"], row.get("rover_mask"), row.get("range_mask"))
         iid = image_id(grey)
@@ -117,11 +149,23 @@ def fetch_test_split(split):
 
 
 def fetch_train_shard(shard, quota, exclude):
-    """Take up to `quota` usable labelled images from one train parquet shard."""
+    """Take up to `quota` usable labelled images from one train parquet shard.
+
+    The result is checkpointed to DATA_DIR/train_shards/ so a rerun skips finished shards."""
+    ck = C.DATA_DIR / "train_shards" / f"shard_{shard:02d}.json"
+    if ck.exists():
+        d = json.loads(ck.read_text())
+        if d["quota"] >= quota:
+            print(f"  shard {shard:2d}: cached ({len(d['ids'])})", flush=True)
+            return d["ids"], np.array(d["counts"], np.int64), d["skipped"]
     f = f"data/train-{shard:05d}-of-{C.N_TRAIN_SHARDS:05d}.parquet"
-    ids, counts, skipped = [], np.zeros(C.N_CLASSES, np.int64), {"few_labels": 0, "in_test": 0}
+    ids, counts = [], np.zeros(C.N_CLASSES, np.int64)
+    skipped = {"few_labels": 0, "in_test": 0, "unreadable": 0}
     for row in _stream(data_files=f):
         if not row["has_labels"] or row["label_mask"] is None:
+            continue
+        if not _decode(row):
+            skipped["unreadable"] += 1
             continue
         mask = clean_mask(row["label_mask"], row.get("rover_mask"), row.get("range_mask"))
         if labelled_frac(mask) < C.MIN_LABELLED_FRAC:
@@ -141,6 +185,8 @@ def fetch_train_shard(shard, quota, exclude):
         if len(ids) >= quota:
             break
     print(f"  shard {shard:2d}: kept {len(ids)}  skipped {skipped}", flush=True)
+    ck.parent.mkdir(parents=True, exist_ok=True)
+    ck.write_text(json.dumps({"quota": quota, "ids": ids, "counts": counts.tolist(), "skipped": skipped}))
     return ids, counts, skipped
 
 
@@ -198,15 +244,15 @@ def main():
         quota = int(np.ceil(args.n_train / C.N_TRAIN_SHARDS))
         with ThreadPoolExecutor(args.workers) as ex:
             res = list(ex.map(lambda s: fetch_train_shard(s, quota, test_ids), range(C.N_TRAIN_SHARDS)))
-        ids, counts, skipped = [], np.zeros(C.N_CLASSES, np.int64), {"few_labels": 0, "in_test": 0}
-        for i, c, s in res:
+        ids, skipped = [], {"few_labels": 0, "in_test": 0, "unreadable": 0}
+        for i, _, s in res:
             for iid in i:
                 if iid not in ids:
                     ids.append(iid)
-            counts += c
             for k in skipped:
-                skipped[k] += s[k]
+                skipped[k] += s.get(k, 0)
         ids = ids[: args.n_train]
+        counts = sum(class_counts(load_mask("train", iid)) for iid in ids)
         manifest["train"] = {"ids": ids, "class_pixels": counts.tolist(), "skipped": skipped}
         manifest_p.write_text(json.dumps(manifest))
     else:

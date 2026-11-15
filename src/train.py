@@ -58,7 +58,7 @@ def main():
     t = time.time()
     logreg = make_pipeline(
         StandardScaler(),
-        LogisticRegression(C=0.5, class_weight="balanced", max_iter=400, random_state=C.SEED),
+        LogisticRegression(C=0.5, class_weight="balanced", max_iter=2000, random_state=C.SEED),
     )
     logreg.fit(Xtr, ytr)
     candidates["logreg"] = (logreg, time.time() - t)
