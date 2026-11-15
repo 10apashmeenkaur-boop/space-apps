@@ -362,7 +362,7 @@ const start = async () => {
       `(ground truth ${pct(s.expert_sand)} + ${pct(s.expert_rock)}) · worst verdict ` +
       `<b style="color:${vcol[s.verdict]}">${s.verdict}</b>`;
     m.bindPopup(head + '<div><i>Loading photos...</i></div>',
-                {maxWidth: 480, minWidth: 440, maxHeight: 440, autoPanPaddingTopLeft: [180, 20]});
+                {maxWidth: 400, minWidth: 360, maxHeight: 440, autoPanPaddingTopLeft: [40, 20], autoPanPaddingBottomRight: [20, 20]});
     m.on('popupopen', async () => {
       if (s.loading || s.html) return;  // fetch once per stop
       s.loading = true;
