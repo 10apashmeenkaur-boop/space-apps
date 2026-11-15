@@ -20,6 +20,9 @@ and carry out a successful Marswalk while doing new and exciting science along t
 
 Live demo: `<add Hugging Face Space link>` · Video: `<add link>`
 
+**AI ground check, official AI4Mars test set (`test_min3`): mIoU 0.777 vs 0.056 for a majority-class
+baseline; sand recall 96.3% vs 0%.** Runs on a laptop CPU (~0.5 s per image).
+
 ## The problem
 
 A walk on Mars is planned on Earth, from orbit, long before anyone steps out. Two things end
@@ -60,8 +63,10 @@ soil/bedrock/sand/big-rock fractions and the experts' labels, which differ by 9.
 sand on average.
 **Route tool:** click waypoints and get:
 - distance, elevation profile, climb and descent;
-- **slope risk** from HiRISE: the share of the route crossing >15° and >25° cells;
-- **AI sand risk** from every geolocated Navcam image within 50 m of the route;
+- **slope risk**: the share of the route crossing >15° and >25° cells. HiRISE is used inside its box
+  and MOLA (463 m) outside it, and each leg is labelled with the source it used (HiRISE / MOLA / mixed);
+- **AI sand/rock risk**: the nearest analysed Navcam photos within 200 m of the route, each with its
+  predicted and ground-truth sand and big-rock shares;
 - how much of the walk follows ground Curiosity already drove (proven trafficable);
 - **science stops** within 1.5 km;
 - an **estimated walking time** (3 km/h on flat ground, Tobler's slope penalty, plus 15 min per
@@ -87,28 +92,33 @@ through the near field, and a briefing gives a GO / CAUTION / HOLD verdict.
 5. Test: class probabilities are bilinearly upsampled to 1024×1024 and scored pixel by pixel against
    the expert masks, ignoring unlabelled pixels.
 
-**Leakage check:** the dataset has no file names, so every image is identified by an MD5 hash of
-its pixels. No test image appears in train or validation (asserted in code; ids in
-`results/image_ids.json`).
+**Leakage check:** every image is identified by an MD5 hash of its pixels, which also catches
+the same photo stored twice under different names. No test image appears in train or validation
+(asserted in code; ids in `results/image_ids.json`).
 
 ## Results (official AI4Mars test set, 322 images)
 
-| Test split | Pixel acc | mIoU | Sand recall | Sand IoU | Big-rock recall | Big-rock precision | Baseline acc / mIoU |
-|---|---|---|---|---|---|---|---|
-| test_min1 | 91.8% | 0.665 | 87.6% | 0.848 | 49.6% | 0.13 | 30.9% / 0.077 |
-| test_min2 | 95.5% | 0.711 | 93.7% | 0.920 | 80.8% | 0.11 | 27.4% / 0.068 |
-| **test_min3** | **97.8%** | **0.777** | **96.3%** | **0.956** | 93.7% | 0.26 | 22.4% / 0.056 |
+| Test split | **mIoU** (baseline) | **Sand recall** (baseline) | Sand IoU | Big-rock recall / precision | Pixel acc (baseline) |
+|---|---|---|---|---|---|
+| **test_min3** | **0.777** (0.056) | **96.3%** (0%) | 0.956 | 94% / 0.26 | 97.8% (22.4%) |
+| test_min2 | 0.711 (0.068) | 93.7% (0%) | 0.920 | 81% / 0.11 | 95.5% (27.4%) |
+| test_min1 | 0.665 (0.077) | 87.6% (0%) | 0.848 | 50% / 0.13 | 91.8% (30.9%) |
 
-*Baseline* = always predict the most common **training** class (bedrock); no test information is
-used. `test_min3` has the strictest labeller agreement (cleanest labels). Even a constant guess of
-the most common *test* class (soil) would score at most 51%.
+*Baseline* = always predict the most common **training** class (bedrock), so it never finds sand.
+No test information is used. **`test_min3` scores only pixels that all of the (at least three)
+labellers agreed on**, so it leaves out the ambiguous boundaries and is the easiest of the three
+splits. `test_min2` and `test_min1` relax the agreement rule, and scores drop accordingly. Even a
+constant guess of the most common *test* class (soil) would score at most 51% pixel accuracy.
 
 ![Confusion matrix](results/confusion_matrix.png)
 
-Reference points (protocol not identical, so not a like-for-like comparison): JPL reports
-DeepLabv3 at ≈96% pixel accuracy on AI4Mars and SPOCv2 at 91.4%. Those models are fine-tuned
-end-to-end on GPUs; ours is a frozen foundation model plus a small classifier on a laptop CPU
-(~0.5 s per image).
+**Published reference points (a different setup, so not a like-for-like comparison):** the
+AI4Mars paper (CVPR 2021 workshop) reports **DeepLabv3 above 96% overall accuracy**, and the
+Zooniverse AI4Mars results report **SPOCv2 at 91.41%**. Those models were trained and scored under
+their own protocols. Ours scores pixels of the public test masks, and `test_min3` only scores
+pixels where the labellers all agreed. **We do not claim to beat JPL's models.** The point here is
+different: a frozen foundation model plus a small classifier, trained in minutes, gets usable
+sand detection on a laptop CPU (~0.5 s per image).
 
 Good and failure examples are in `results/examples/`. The worst cases are deep shadows on dune
 fields, which get read as bedrock or big rock.
@@ -119,16 +129,17 @@ fields, which get read as bedrock or big rock.
   precision is low (0.11–0.26): the model over-calls big rocks, so the planner is conservative, not
   blind.
 - **Slope covers the HiRISE DEM area only** (137.12–137.73°E, 4.25–4.93°S, around Curiosity's
-  traverse). Routes leaving it are refused rather than assessed with coarser data. Each 20 m cell
-  keeps its steepest 4 m patch, so a flagged cell may be mostly walkable. Mosaic seams in the DEM
-  can create false steep lines.
+  traverse). Outside it the route falls back to MOLA 463 m slope, which smooths hazards away;
+  the report labels every leg with its source, so treat MOLA legs as unverified. Each 20 m HiRISE
+  cell keeps its steepest 4 m patch, so a flagged cell may be mostly walkable. Mosaic seams in the
+  DEM can create false steep lines.
 - **CRISM layers show band-parameter strength from one observation** (FRT0000A091, lower Mount
   Sharp), not confirmed mineral maps. The clay signal in that cube is weak. Orbital hydrous
   detections are given only to 0.1°.
 - **AI sand risk exists only where Curiosity took a test-set image** (319 images, 89 stops). Markers
   sit at the rover's position, and the terrain seen is within ~30 m of it. 32 positions are
-  interpolated by drive number, so they are approximate. Routes away from the traverse get "unknown"
-  for sand.
+  interpolated by drive number, so they are approximate. Routes more than 200 m from any analysed
+  photo get "unknown" for sand.
 - **The image route is a camera-view preview** (lower 60% of the frame, where labels exist), not
   distances in metres.
 - **Walk time** is a planning estimate (Tobler's function rescaled to 3 km/h), not a validated EVA
@@ -173,10 +184,40 @@ src/marswalk.py     map route analysis (HiRISE slope, AI sand, stops, proven gro
 tests/              pytest
 ```
 
+## What the app reads at runtime (deployment check)
+
+Checked with a Python audit hook while exercising every code path (map layers, marker popups,
+HiRISE-only and HiRISE+MOLA routes, AI ground check on all samples), run from a fresh `git clone`
+with **no `data/` folder** and `SANDTRAP_DATA` pointing at a folder that does not exist:
+
+| Path | Used for |
+|---|---|
+| `app.py`, `config.py`, `src/{briefing,features,geo,infer,marswalk,planner}.py` | code |
+| `models/classifier.joblib` | LightGBM terrain classifier |
+| `results/metrics.json`, `results/confusion_matrix.png` | accuracy table and figure |
+| `samples/*.png` (8) | AI Ground Check examples |
+| `geo/layers.json` | overlays, traverse, waypoints, science stops |
+| `geo/hirise_dem20.npz`, `geo/mola_dem.npz` | slope and elevation for routes |
+| `geo/ai_images.json`, `geo/ai_thumbs/*.jpg` (319) | geolocated AI markers and popups |
+| `facebook/dinov2-small` | downloaded from the Hugging Face Hub on first start |
+
+Nothing is read from `data/`, which holds only build-time caches (dataset images, features, DEM
+tiles). It is excluded from git and from the Space upload. The clean-copy server answered
+HTTP 200 and ran an AI ground check through the Gradio API in 2.3 s.
+
+## Licences
+
+| Item | Licence / terms |
+|---|---|
+| This code | **Apache-2.0** (`LICENSE`) |
+| AI4Mars dataset (NASA/JPL-Caltech, via `hassanjbara/AI4MARS`) | **CC0-1.0** |
+| DINOv2-small model weights (`facebook/dinov2-small`, Meta) | **Apache-2.0** (per its Hugging Face model card) |
+| CTX global mosaic beta01 | free use for all purposes; credit NASA/JPL/MSSS/The Murray Lab (per the service description) |
+| MOLA, HiRISE, CRISM, OMEGA products, MMGIS traverse | NASA / ESA mission data, credited below |
+
 ## Credits
 
-Data: NASA/JPL-Caltech **AI4Mars**; **NASA Mars Trek** (CTX mosaic: NASA/JPL/MSSS, Caltech Murray
-Lab; MOLA: NASA/JPL/GSFC; HiRISE Gale DEM: NASA/JPL/University of Arizona; CRISM/OMEGA hydrous
-detections); **PDS Geosciences Node** (CRISM MTRDR); **NASA MMGIS** (Curiosity traverse, waypoints,
+Data: NASA/JPL-Caltech **AI4Mars**; **NASA Mars Trek** (CTX mosaic: NASA/JPL/MSSS/The Murray Lab; MOLA: NASA/JPL/GSFC; HiRISE Gale DEM: NASA/JPL/University of Arizona; CRISM/OMEGA hydrous
+detections); **PDS Geosciences Node** (MOLA MEGDR, CRISM MTRDR); **NASA MMGIS** (Curiosity traverse, waypoints,
 science sites).
 Model: DINOv2 (Meta AI). Libraries: PyTorch, Transformers, scikit-learn, LightGBM, Gradio, Leaflet.

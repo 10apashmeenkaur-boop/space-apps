@@ -208,17 +208,24 @@ def _ai_html(ai):
     sand = np.array([a["ai"]["sand"] for a in ai])
     rock = np.array([a["ai"]["bigrock"] for a in ai])
     stops = {(a["site"], a["drive"]) for a in ai}
-    rows = "".join(
-        f"<li>{a['distance_m']:.0f} m away - sol {a['sol_min']}, site {a['site']}/drive {a['drive']} "
-        f"({a['loc']}): AI sand <b>{a['ai']['sand']:.0%}</b>, big rock <b>{a['ai']['bigrock']:.0%}</b>"
-        + (f"; ground truth sand {a['expert']['sand']:.0%}, big rock {a['expert']['bigrock']:.0%}"
-           if a.get("expert") else "")
-        + f" - {a['verdict']}</li>" for a in ai[:AI_SHOW])
+    by_stop = {}
+    for a in ai:  # nearest first, so the first photo of each stop gives its distance
+        by_stop.setdefault((a["site"], a["drive"]), []).append(a)
+    rows = ""
+    for (site, drive), ph in list(by_stop.items())[:AI_SHOW]:
+        gt = [p["expert"] for p in ph if p.get("expert")]
+        gts = (f"; ground truth sand {np.mean([g['sand'] for g in gt]):.0%}, "
+               f"big rock {np.mean([g['bigrock'] for g in gt]):.0%}") if gt else ""
+        worst_v = max((p["verdict"] for p in ph), key={"GO": 0, "GO WITH CAUTION": 1, "HOLD": 2}.get)
+        rows += (f"<li>{ph[0]['distance_m']:.0f} m away - sol {ph[0]['sol_min']}, site {site}/drive {drive} "
+                 f"({ph[0]['loc']}, {len(ph)} photo{'s' if len(ph) > 1 else ''}): AI sand "
+                 f"<b>{np.mean([p['ai']['sand'] for p in ph]):.0%}</b>, big rock "
+                 f"<b>{np.mean([p['ai']['bigrock'] for p in ph]):.0%}</b>{gts} - worst {worst_v}</li>")
     worst = max(ai, key=_risk)
     return (f"<li><b>AI sand/rock risk:</b> {len(ai)} analysed photos at {len(stops)} rover stops within "
             f"{AI_RADIUS_M:.0f} m. Near-field sand mean <b>{sand.mean():.0%}</b> (max {sand.max():.0%}), "
             f"big rock mean <b>{rock.mean():.0%}</b> (max {rock.max():.0%}). Riskiest photo: sol "
-            f"{worst['sol_min']}, {_risk(worst):.0%} sand + rock.<br>Nearest photos:"
+            f"{worst['sol_min']}, {_risk(worst):.0%} sand + rock.<br>Nearest rover stops with photos:"
             f"<ul class='mw-dim'>{rows}</ul></li>")
 
 

@@ -309,7 +309,7 @@ const start = async () => {
   // --- NASA Mars Trek basemaps (equirectangular, 2x1 tiles at level 0) ---
   const ctx = L.tileLayer('https://astro.arcgis.com/arcgis/rest/services/OnMars/CTX/MapServer/tile/{z}/{y}/{x}', {
     tileSize: 512, zoomOffset: -1, minNativeZoom: 1, maxNativeZoom: 12, maxZoom: 14,
-    attribution: 'CTX global mosaic: NASA/JPL/MSSS, Caltech Murray Lab, via NASA Mars Trek'}).addTo(map);
+    attribution: 'CTX global mosaic: NASA/JPL/MSSS/The Murray Lab, via NASA Mars Trek'}).addTo(map);
   const molaUrl = 'https://trek.nasa.gov/tiles/Mars/EQ/Mars_MGS_MOLA_ClrShade_merge_global_463m/1.0.0/default/default028mm/{z}/{y}/{x}.jpg';
   const mola = L.tileLayer(molaUrl, {maxNativeZoom: 7, maxZoom: 14,
     attribution: 'MOLA colour hillshade: NASA/JPL/GSFC, via NASA Mars Trek'});
@@ -514,27 +514,31 @@ with gr.Blocks(title="Marswalk Planner - Gale Crater") as demo:
             "| CTX global mosaic (~6 m/px) | MRO Context Camera | NASA Mars Trek WMTS (Caltech Murray Lab beta01 mosaic) |\n"
             "| MOLA colour hillshade (463 m/px) | MGS Mars Orbiter Laser Altimeter | NASA Mars Trek WMTS |\n"
             "| Elevation + slope hazards (1 m DEM, 4 m slope baseline, 20 m cells) | MRO HiRISE stereo DEM of Gale | NASA Mars Trek (Gale_DEM_SMG_1m) |\n"
+            "| Slope fallback outside the HiRISE box (463 m) | MGS MOLA MEGDR 128 px/deg | PDS Geosciences Node |\n"
             "| Clay / sulfate strength | MRO CRISM MTRDR FRT0000A091 (D2300, SINDEX2, BD1900_2) | PDS Geosciences Node |\n"
             "| Hydrous mineral detections | MRO CRISM + Mars Express OMEGA | NASA Mars Trek |\n"
             "| Traverse, waypoints, science sites | MSL Curiosity | NASA MMGIS (mars.nasa.gov/maps) |\n"
             "| Terrain labels for the AI | MSL Curiosity Navcam | NASA/JPL-Caltech AI4Mars |\n"
             "| Image positions | site/drive in Navcam product IDs + MSL waypoints | AI4Mars filenames + NASA MMGIS |\n\n"
             "### Limits\n"
-            "- **Slope covers the HiRISE DEM area only** (137.12–137.73°E, 4.25–4.93°S, around Curiosity's "
-            "traverse). Slope is computed at a 4 m baseline and the steepest patch per 20 m cell is kept, so a "
-            "flagged cell may be mostly walkable. Mosaic seams in the DEM can create false steep lines.\n"
+            "- **HiRISE slope covers 137.12–137.73°E, 4.25–4.93°S** (around Curiosity's traverse). Outside it, "
+            "routes fall back to MOLA 463 m slope, which smooths hazards away; the route report labels every "
+            "leg with its source. HiRISE slope uses a 4 m baseline and keeps the steepest patch per 20 m cell, "
+            "so a flagged cell may be mostly walkable. Mosaic seams in the DEM can create false steep lines.\n"
             "- **CRISM layers show band-parameter strength from one observation**, not confirmed mineral maps; "
             "the clay signal in FRT0000A091 is weak. Orbital detections are only given to 0.1°.\n"
-            "- **AI sand risk exists only where Curiosity took a test-set image**: 319 images at 89 rover "
-            "stops along the traverse. Positions are the rover's, interpolated by drive number when the exact "
-            "drive is not a published waypoint (32 images); 3 images could not be placed.\n"
+            "- **AI sand/rock risk exists only near analysed photos**: 319 test-set images at 89 rover stops "
+            "along the traverse; the route report uses photos within 200 m. Positions are the rover's, "
+            "interpolated by drive number when the exact drive is not a published waypoint (32 images); "
+            "3 images could not be placed.\n"
             "- **Walk time** assumes 3 km/h on flat ground with Tobler's slope penalty, plus 15 min per science "
             "stop. It is a planning estimate, not a validated EVA model.")
 
     gr.Markdown("<small>Data: NASA/JPL-Caltech AI4Mars; NASA Mars Trek (CTX, MOLA, CRISM/OMEGA); PDS Geosciences "
-                "Node (CRISM MTRDR); MRO HiRISE Gale DEM via NASA Mars Trek; NASA MMGIS (Curiosity traverse). "
-                "Model: DINOv2-small (Meta) + LightGBM. Routing: A* (images) and great-circle sampling on the "
-                "HiRISE DEM (map).</small>")
+                "Node (MOLA MEGDR, CRISM MTRDR); MRO HiRISE Gale DEM via NASA Mars Trek; NASA MMGIS (Curiosity "
+                "traverse). CTX credit: NASA/JPL/MSSS/The Murray Lab. Model: DINOv2-small (Meta, Apache-2.0) + "
+                "LightGBM. Routing: A* (images) and great-circle sampling on HiRISE / MOLA (map). "
+                "Code: Apache-2.0.</small>")
 
 if __name__ == "__main__":
     demo.queue(default_concurrency_limit=2).launch(css=CSS, theme=gr.themes.Soft())
