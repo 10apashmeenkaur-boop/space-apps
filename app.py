@@ -140,21 +140,32 @@ def briefing_md(brief, secs):
     return head + "\n\n" + body + foot
 
 
-TABLE_HEADERS = ["Test split", "Images", "Pixel acc", "mIoU", "Sand recall", "Sand IoU", "Big-rock recall",
-                 "Baseline acc / mIoU"]
+TABLE_HEADERS = ["Test split", "Images", "mIoU (baseline)", "Sand recall (baseline)", "Sand IoU",
+                 "Big-rock recall / precision", "Pixel acc (baseline)"]
 
 
 def metrics_table():
     if METRICS is None:
-        return [["metrics.json missing - run src/evaluate.py"] + [""] * 7]
+        return [["metrics.json missing - run src/evaluate.py"] + [""] * 6]
     rows = []
-    for s, r in METRICS["splits"].items():
+    for s in ["test_min3", "test_min2", "test_min1"]:  # strictest-agreement split first
+        r = METRICS["splits"][s]
         m, b = r["model"], r["baseline"]
-        rows.append([s, r["n_images"], f"{m['pixel_accuracy']:.1%}", f"{m['mIoU']:.3f}",
-                     f"{m['per_class']['sand']['recall']:.1%}", f"{m['per_class']['sand']['IoU']:.3f}",
-                     f"{m['per_class']['bigrock']['recall']:.1%}",
-                     f"{b['pixel_accuracy']:.1%} / {b['mIoU']:.3f}"])
+        mc, bc = m["per_class"], b["per_class"]
+        rows.append([s, r["n_images"], f"{m['mIoU']:.3f} ({b['mIoU']:.3f})",
+                     f"{mc['sand']['recall']:.1%} ({bc['sand']['recall']:.0%})", f"{mc['sand']['IoU']:.3f}",
+                     f"{mc['bigrock']['recall']:.0%} / {mc['bigrock']['precision']:.2f}",
+                     f"{m['pixel_accuracy']:.1%} ({b['pixel_accuracy']:.1%})"])
     return rows
+
+
+def headline():
+    if METRICS is None:
+        return ""
+    r = METRICS["splits"]["test_min3"]
+    m, b = r["model"], r["baseline"]
+    return (f"**On `test_min3`: mIoU {m['mIoU']:.3f} vs {b['mIoU']:.3f} for the baseline; sand recall "
+            f"{m['per_class']['sand']['recall']:.1%} vs {b['per_class']['sand']['recall']:.0%}.** ")
 
 
 def ground_check(img, auto, tx, ty):
@@ -181,12 +192,14 @@ def ai_stops():
         groups.setdefault((im["site"], im["drive"]), []).append(im)
     out = []
     for (site, drive), ims in groups.items():
-        ex = [i["expert"]["sand"] for i in ims if i.get("expert")]
+        ex = [i["expert"] for i in ims if i.get("expert")]
         out.append({"site": site, "drive": drive, "lat": ims[0]["lat"], "lon": ims[0]["lon"],
                     "loc": ims[0]["loc"], "sol": ims[0]["sol_min"], "sol_max": ims[0]["sol_max"],
                     "n": len(ims), "ids": [i["id"] for i in ims],
                     "sand": float(np.mean([i["ai"]["sand"] for i in ims])),
-                    "expert_sand": float(np.mean(ex)) if ex else None,
+                    "rock": float(np.mean([i["ai"]["bigrock"] for i in ims])),
+                    "expert_sand": float(np.mean([e["sand"] for e in ex])) if ex else None,
+                    "expert_rock": float(np.mean([e["bigrock"] for e in ex])) if ex else None,
                     "verdict": max((i["verdict"] for i in ims), key=VERDICT_RANK.get)})
     return out
 
@@ -207,7 +220,7 @@ def get_layers(data=None):
 
 
 def ai_stop_html(data):
-    """Popup body for one rover stop: thumbnails (image | AI terrain map) and AI vs expert sand."""
+    """Popup body for one rover stop: photo | AI terrain map | expert ground truth, with fractions."""
     import base64
 
     args = _js_args(data)
@@ -220,12 +233,16 @@ def ai_stop_html(data):
         if not im or not f.exists():
             continue
         b64 = base64.b64encode(f.read_bytes()).decode()
-        ex = f"{im['expert']['sand']:.0%}" if im.get("expert") else "n/a"
+        e = im.get("expert") or {}
+        gt = (f"ground truth sand <b>{e['sand']:.0%}</b>, big rock <b>{e['bigrock']:.0%}</b>" if e
+              else "no ground truth in the near field")
         parts.append(
-            f"<div style='margin:6px 0'><img src='data:image/jpeg;base64,{b64}' style='width:100%;border-radius:4px'>"
-            f"<div style='font-size:11px'><code>{im['file']}</code><br>"
-            f"<b style='color:{VERDICT_COLOR[im['verdict']]}'>{im['verdict']}</b> · near-field sand: AI "
-            f"<b>{im['ai']['sand']:.0%}</b>, experts <b>{ex}</b> · big rock AI {im['ai']['bigrock']:.0%}</div></div>")
+            f"<div style='margin:8px 0'><img src='data:image/jpeg;base64,{b64}' style='width:100%;border-radius:4px'>"
+            "<div style='display:flex;justify-content:space-around;font-size:10px;opacity:.75'>"
+            "<span>photo</span><span>AI prediction</span><span>expert ground truth</span></div>"
+            f"<div style='font-size:11px'><code>{im['file']}</code><br>near field: AI sand <b>{im['ai']['sand']:.0%}</b>, "
+            f"big rock <b>{im['ai']['bigrock']:.0%}</b> · {gt} · "
+            f"<b style='color:{VERDICT_COLOR[im['verdict']]}'>{im['verdict']}</b></div></div>")
     more = f"<div style='font-size:11px'>+ {len(ids) - 6} more images at this stop</div>" if len(ids) > 6 else ""
     return "".join(parts) + more
 
@@ -270,6 +287,8 @@ MAP_CSS = """
 .mw-kpis b {font-size:1.05rem;}
 .mw-dim {opacity:0.7; font-size:0.82rem;}
 .mw-err {color:#c53030; font-weight:600;}
+.mw-legs {border-collapse:collapse; margin:6px 0; font-size:0.82rem;}
+.mw-legs td, .mw-legs th {padding:2px 8px; border-bottom:1px solid #8883; text-align:left;}
 .mw-ctl a {display:block; width:auto !important; height:auto !important; line-height:1.3 !important;
   padding:6px 10px; background:#fff; color:#222; font:600 12px system-ui; white-space:nowrap; text-align:left;
   border-bottom:1px solid #ccc; cursor:pointer; text-decoration:none;}
@@ -305,6 +324,8 @@ const start = async () => {
     overlays['HiRISE DEM coverage'] = L.rectangle(ov.slope.bounds,
       {color: '#ffb347', weight: 1, fill: false, dashArray: '6 4'}).addTo(map);
   }
+  if (ov.slope_mola) overlays['Slope hazard (MOLA 463 m, outside the HiRISE box)'] =
+      L.imageOverlay(ov.slope_mola.url, ov.slope_mola.bounds, {opacity: 0.7}).addTo(map);
   if (ov.crism_sulfate) overlays['CRISM polyhydrated sulfate strength (FRT0000A091)'] =
       L.imageOverlay(ov.crism_sulfate.url, ov.crism_sulfate.bounds).addTo(map);
   if (ov.crism_clay) overlays['CRISM Fe/Mg clay strength (FRT0000A091, weak)'] =
@@ -328,17 +349,20 @@ const start = async () => {
 
   // --- AI ground checks: AI4Mars Navcam images geolocated by site/drive in their filenames ---
   const vcol = {'GO': '#1f9d55', 'GO WITH CAUTION': '#d69e2e', 'HOLD': '#c53030'};
+  const pct = v => v === null ? 'n/a' : Math.round(100 * v) + '%';
+  const riskCol = r => r < 0.10 ? '#1a9850' : r < 0.30 ? '#fee08b' : r < 0.50 ? '#fc8d59' : '#d73027';
   const aiLayer = L.layerGroup((data.ai_stops || []).map(s => {
+    const risk = s.sand + s.rock;
     const m = L.circleMarker([s.lat, s.lon], {radius: 4 + Math.min(s.n, 8) * 0.6, color: '#111', weight: 1.5,
-      fillColor: vcol[s.verdict], fillOpacity: 0.95});
+      fillColor: riskCol(risk), fillOpacity: 0.95});
     const sols = s.sol === s.sol_max ? `sol ${s.sol}` : `sols ${s.sol}-${s.sol_max}`;
-    const ex = s.expert_sand === null ? 'n/a' : Math.round(100 * s.expert_sand) + '%';
     const head = `<b>AI ground check - site ${s.site}, drive ${s.drive}</b> (${sols})<br>` +
-      `${s.n} Navcam image${s.n > 1 ? 's' : ''} · position: ${s.loc}<br>` +
-      `near-field sand: AI <b>${Math.round(100 * s.sand)}%</b>, experts <b>${ex}</b> · worst verdict ` +
+      `${s.n} Navcam photo${s.n > 1 ? 's' : ''} · position: ${s.loc}<br>` +
+      `predicted near-field sand <b>${pct(s.sand)}</b> + big rock <b>${pct(s.rock)}</b> = <b>${pct(risk)}</b> ` +
+      `(ground truth ${pct(s.expert_sand)} + ${pct(s.expert_rock)}) · worst verdict ` +
       `<b style="color:${vcol[s.verdict]}">${s.verdict}</b>`;
-    m.bindPopup(head + '<div><i>Loading images...</i></div>',
-                {maxWidth: 380, minWidth: 340, maxHeight: 420, autoPanPaddingTopLeft: [180, 20]});
+    m.bindPopup(head + '<div><i>Loading photos...</i></div>',
+                {maxWidth: 480, minWidth: 440, maxHeight: 440, autoPanPaddingTopLeft: [180, 20]});
     m.on('popupopen', async () => {
       if (s.loading || s.html) return;  // fetch once per stop
       s.loading = true;
@@ -349,7 +373,7 @@ const start = async () => {
     });
     return m;
   })).addTo(map);
-  overlays['AI ground checks (AI4Mars images on the traverse)'] = aiLayer;
+  overlays['AI ground checks: predicted sand + big rock % (AI4Mars photos)'] = aiLayer;
 
   L.control.layers({'CTX mosaic (~6 m/px)': ctx, 'MOLA colour hillshade (463 m/px)': mola}, overlays,
       {collapsed: true}).addTo(map);
@@ -357,10 +381,11 @@ const start = async () => {
 
   const legend = L.control({position: 'bottomright'});
   legend.onAdd = () => { const d = L.DomUtil.create('div', 'mw-legend'); d.innerHTML =
-    '<i style="background:#ff9600"></i>slope &gt;15° <i style="background:#e61414"></i>&gt;25° (HiRISE)<br>' +
-    '<i style="background:#1f9d55;border-radius:50%"></i>AI GO ' +
-    '<i style="background:#d69e2e;border-radius:50%"></i>CAUTION ' +
-    '<i style="background:#c53030;border-radius:50%"></i>HOLD<br>' +
+    '<i style="background:#ff9600"></i>slope &gt;15° <i style="background:#e61414"></i>&gt;25°<br>' +
+    '<b>AI sand + big rock</b><br><i style="background:#1a9850;border-radius:50%"></i>&lt;10% ' +
+    '<i style="background:#fee08b;border-radius:50%"></i>10-30% ' +
+    '<i style="background:#fc8d59;border-radius:50%"></i>30-50% ' +
+    '<i style="background:#d73027;border-radius:50%"></i>&gt;50%<br>' +
     '<i style="background:#ff00c8"></i>sulfate (CRISM)<br><i style="background:#2878ff"></i>clay (CRISM)<br>' +
     '<i style="background:#fff;border:1px solid #333"></i>Curiosity traverse<br>' +
     '<i style="background:#ecc94b;border-radius:50%"></i>science site ' +
@@ -451,11 +476,13 @@ with gr.Blocks(title="Marswalk Planner - Gale Crater") as demo:
 
         with gr.Accordion("How accurate is this?", open=False):
             gr.Markdown(
-                "Scored pixel-by-pixel on the **official AI4Mars expert test set** (322 Curiosity Navcam images, "
+                headline() +
+                "Scored pixel by pixel on the **official AI4Mars expert test set** (322 Curiosity Navcam images, "
                 "never seen in training), ignoring unlabelled pixels. "
                 f"Classifier: **{METRICS['model'] if METRICS else '?'}** on frozen DINOv2-small patch features. "
                 f"Baseline = always predict **{METRICS['baseline_class'] if METRICS else '?'}** "
-                "(the most common training class). `test_min3` has the strictest labeller agreement.")
+                "(the most common training class), so its sand recall is 0%. `test_min3` scores only pixels "
+                "that all of the (at least three) labellers agreed on; `min2` and `min1` relax that.")
             gr.Dataframe(metrics_table(), headers=TABLE_HEADERS, interactive=False, wrap=True)
             with gr.Row():
                 cm_png = C.RESULTS_DIR / "confusion_matrix.png"
@@ -463,9 +490,7 @@ with gr.Blocks(title="Marswalk Planner - Gale Crater") as demo:
                     gr.Image(str(cm_png), label="Confusion matrix, test_min3 (rows = expert label)",
                              interactive=False, height=380)
                 gr.Markdown(
-                    "**Published reference points (protocol not identical):** JPL's DeepLabv3 on AI4Mars ≈ 96% "
-                    "pixel accuracy; SPOCv2 91.4%. Those are fine-tuned end-to-end on GPUs - this is a frozen "
-                    "foundation model plus a small classifier that runs on a laptop CPU.\n\n"
+                    "**Published reference points - a different setup, so not a like-for-like comparison:** the AI4Mars paper (CVPR 2021 workshop) reports **DeepLabv3 above 96% overall accuracy**, and the Zooniverse AI4Mars results report **SPOCv2 at 91.41%**. Those models were trained and scored under their own protocols; ours scores pixels of the public test masks, and `test_min3` keeps only pixels that all of the (at least three) labellers agreed on, which is an easier target. We do **not** claim to beat JPL's models. Ours is a frozen foundation model plus a small classifier that runs on a laptop CPU.\n\n"
                     "**Honest limits**\n"
                     "- Big rocks are very rare (0.9% of training pixels, 0.1–0.2% of test pixels) and the weakest class.\n"
                     "- Labels only reach ~30 m, so the far field is not planned.\n"

@@ -77,13 +77,18 @@ def near_fracs(lab, top_frac=C.NEAR_FIELD_FRAC):
     return {c: round(float(v), 3) for c, v in zip(C.CLASSES, f)}
 
 
-def thumb(grey, prob, path, size=168):
+def thumb(grey, prob, truth, path, size=150):
+    """Three panels: photo | AI terrain map | expert ground truth (unlabelled pixels left plain)."""
     pal = np.array([C.COLORS[c] for c in C.CLASSES], np.float32)
     g = cv2.resize(grey, (size, size), interpolation=cv2.INTER_AREA)
-    lab = upsample(prob, size).argmax(-1)
-    over = (0.5 * np.repeat(g[..., None].astype(np.float32), 3, -1) + 0.5 * pal[lab]).astype(np.uint8)
-    side = np.concatenate([np.repeat(g[..., None], 3, -1), np.full((size, 4, 3), 255, np.uint8), over], 1)
-    Image.fromarray(side).save(path, quality=80)
+    rgb = np.repeat(g[..., None].astype(np.float32), 3, -1)
+    ai = (0.5 * rgb + 0.5 * pal[upsample(prob, size).argmax(-1)]).astype(np.uint8)
+    t = cv2.resize(truth, (size, size), interpolation=cv2.INTER_NEAREST)
+    gt = rgb.copy()
+    lab = t != C.IGNORE
+    gt[lab] = 0.5 * rgb[lab] + 0.5 * pal[t[lab]]
+    gap = np.full((size, 3, 3), 255, np.uint8)
+    Image.fromarray(np.concatenate([rgb.astype(np.uint8), gap, ai, gap, gt.astype(np.uint8)], 1)).save(path, quality=82)
 
 
 def main():
@@ -118,7 +123,8 @@ def main():
         grey = load_image(iid)
         prob = proba_grid(clf, np.load(C.FEAT_DIR / "grid" / f"{iid}.npy"))
         brief = make_briefing(plan(prob))
-        thumb(grey, prob, tdir / f"{iid}.jpg")
+        truth = load_mask("test_min3", iid)
+        thumb(grey, prob, truth, tdir / f"{iid}.jpg")
         out.append({
             "id": iid, "file": name, "camera": meta["camera"], "site": meta["site"], "drive": meta["drive"],
             "sol_min": sols[0], "sol_max": sols[1], "lat": round(lat, 6), "lon": round(lon, 6),
