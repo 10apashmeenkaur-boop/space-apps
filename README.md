@@ -7,7 +7,7 @@
 |---|---|
 | **Code** | https://github.com/10apashmeenkaur-boop/space-apps |
 | **Demo (4-slide deck)** | [docs/Marswalk_Planner.pdf](docs/Marswalk_Planner.pdf) |
-| **Live demo (web version)** | `<add Vercel link>`: map, layers, route planner and AI photo markers run in the browser; AI tab shows precomputed results |
+| **Live demo (web version)** | https://marswalk-planner-jet.vercel.app : map, layers, route planner and AI photo markers run in the browser; AI tab shows precomputed results |
 | **Run it yourself** | ~5 min on any laptop, no GPU: see [How to run](#how-to-run) |
 
 The challenge asks for *a layered, integrated view of a location or route on the Martian surface
@@ -326,7 +326,7 @@ HTTP 200 and ran an AI ground check through the Gradio API in 2.3 s.
 
 1. Go to vercel.com → **Add New… → Project** → import the GitHub repo `space-apps`.
 2. Set **Root Directory** to `web`, **Framework Preset** to *Other*, and leave the build command empty.
-3. Press **Deploy**. Vercel gives a `https://….vercel.app` link: put it in the table at the top.
+3. Press **Deploy**. Ours is live at https://marswalk-planner-jet.vercel.app
 
 To rebuild `web/` after changing data: `python src/build_static.py`.
 
