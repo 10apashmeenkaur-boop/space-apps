@@ -1,0 +1,56 @@
+{
+  "classes": [
+    "soil",
+    "bedrock",
+    "sand",
+    "bigrock"
+  ],
+  "ignore": 255,
+  "dino_model": "facebook/dinov2-small",
+  "img": 448,
+  "grid": 32,
+  "chosen": "lightgbm",
+  "train": {
+    "n_train_images": 1275,
+    "n_val_images": 225,
+    "n_train_cells": 305835,
+    "n_val_cells": 53559,
+    "models": {
+      "logreg": {
+        "val_cell_acc": 0.894340820403667,
+        "val_mIoU": 0.6972249718874652,
+        "val_IoU": {
+          "soil": 0.8674948240165632,
+          "bedrock": 0.8172225065952672,
+          "sand": 0.7452556374190668,
+          "bigrock": 0.35892691951896394
+        },
+        "val_recall": {
+          "soil": 0.9224751733183436,
+          "bedrock": 0.8730125347017751,
+          "sand": 0.9020402648290772,
+          "bigrock": 0.749034749034749
+        },
+        "fit_seconds": 147.8741798400879
+      },
+      "lightgbm": {
+        "val_cell_acc": 0.9197893911387441,
+        "val_mIoU": 0.7457209198653422,
+        "val_IoU": {
+          "soil": 0.8842212660249301,
+          "bedrock": 0.8565844975039666,
+          "sand": 0.8071151984511132,
+          "bigrock": 0.43496271748135873
+        },
+        "val_recall": {
+          "soil": 0.9337174442570733,
+          "bedrock": 0.9310591402372339,
+          "sand": 0.9012295635724902,
+          "bigrock": 0.5067567567567568
+        },
+        "fit_seconds": 315.1099672317505
+      }
+    },
+    "chosen": "lightgbm"
+  }
+}

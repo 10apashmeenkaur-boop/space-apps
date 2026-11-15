@@ -8,9 +8,9 @@ Tab 2  AI Ground Check: rover Navcam image -> soil / bedrock / sand / big rock m
 """
 import hashlib
 import json
+import threading
 import time
 from collections import OrderedDict
-from functools import lru_cache
 
 import cv2
 import gradio as gr
@@ -37,12 +37,22 @@ _CACHE: "OrderedDict[str, np.ndarray]" = OrderedDict()
 # =====================================================================================
 # AI ground check
 # =====================================================================================
-@lru_cache(maxsize=1)
-def models():
-    from src.features import DinoFeatures
-    from src.infer import load_classifier
+_MODEL_LOCK = threading.Lock()
+_MODELS = {}
 
-    return DinoFeatures(), load_classifier()
+
+def models():
+    """DINOv2 + classifier, loaded once (warmed in a background thread at startup)."""
+    with _MODEL_LOCK:
+        if "m" not in _MODELS:
+            from src.features import DinoFeatures
+            from src.infer import load_classifier
+
+            _MODELS["m"] = (DinoFeatures(), load_classifier())
+        return _MODELS["m"]
+
+
+threading.Thread(target=models, daemon=True).start()
 
 
 def to_grey(img: Image.Image):
