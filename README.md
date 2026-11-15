@@ -1,14 +1,70 @@
 # Marswalk Planner: Gale Crater, with an AI ground-check layer
 
-**NASA Space Apps 2026, Challenge #10: Interplanetary Survival Guide: Martian Map.**
+**NASA Space Apps Challenge 2026 · Challenge: Interplanetary Survival Guide: Martian Map**
+**Team:** Everything You Despise · **Built by:** Pashmeen Kaur
+
+| | |
+|---|---|
+| **Code** | https://github.com/10apashmeenkaur-boop/space-apps |
+| **Demo video (30 s)** | `<add link>` |
+| **Presentation** | `docs/Marswalk_Planner.pdf` |
+| **Run it yourself** | ~5 min on any laptop, no GPU: see [How to run](#how-to-run) |
+
 The challenge asks for *a layered, integrated view of a location or route on the Martian surface
 that pulls together data from multiple NASA science missions and could help a human explorer plan
 and carry out a successful Marswalk while doing new and exciting science along the way.*
 
-Demo video (30 s): `<add link>` · Run it yourself in about 5 minutes on any laptop (no GPU): see [How to run](#how-to-run).
-
 **AI ground check, official AI4Mars test set (`test_min3`): mIoU 0.777 vs 0.056 for a majority-class
-baseline; sand recall 96.3% vs 0%.** Runs on a laptop CPU (~0.5 s per image).
+baseline; sand recall 96.3% vs 0%.** Runs on a laptop CPU.
+
+## In one minute
+
+- **Why:** Mars is mostly unexplored up close, and the first walkers will be on their own: a
+  radio signal takes 4–22 minutes each way. Steep slopes, soft sand (it ended NASA's Spirit rover
+  in 2009) and big rocks are real dangers for someone in a spacesuit carrying tools.
+- **What:** one map of Gale Crater, Curiosity's field site, built from several NASA missions. It
+  combines slope hazards, mineral signals, Curiosity's real path and **319 real rover photos
+  checked by our AI**. You click a route and get distance, climb, slope risk, sand/rock risk,
+  science stops and walking time.
+- **Proof:** the AI was trained on NASA/JPL's labelled rover photos and tested on NASA's own expert
+  test set, which it never saw. It catches 96% of the sand. 16/16 automated tests pass.
+
+## Project status (submission day, 15 Nov 2026)
+
+| | Status |
+|---|---|
+| Map tab: CTX, MOLA, HiRISE 1 m slope, CRISM/OMEGA, Curiosity traverse + science stops | ✅ done, tested |
+| 319 AI-checked Curiosity photos placed on the map (site/drive from filenames) | ✅ done, tested |
+| Route tool: distance, climb, slope risk per leg (HiRISE / MOLA), AI sand/rock risk, science stops, walk time | ✅ done, tested |
+| AI Ground Check tab: terrain map, safe path, GO / CAUTION / HOLD | ✅ done, tested |
+| Evaluation on NASA's official AI4Mars test set + baseline | ✅ done (`results/metrics.json`) |
+| Unfamiliar-terrain check | ⚠️ tested as an experiment, not in the app yet |
+| Automated tests | ✅ 16/16 pass; app also verified from a clean clone without `data/` |
+| Presentation | ✅ `docs/Marswalk_Planner.pptx` / `.pdf` |
+| Live hosted demo | ❌ not hosted: free Hugging Face hosting no longer covers Gradio apps. Run it locally (5 min) or watch the demo video. |
+| Demo video | ⏳ link to be added above |
+
+## Demo: what to click
+
+1. **Marswalk Map** tab → **★ Example route**. The route report fills in, for example
+   5.82 km, ~3 h, MEDIUM slope risk, AI sand 11% from 102 nearby Curiosity photos.
+2. Click a **red AI marker**. It shows the real Navcam photo, the AI terrain map and the experts' labels.
+3. **Draw route** → click points (follow the white Curiosity line for AI sand data) → the report updates on every click.
+4. **AI Ground Check** tab → click a sample (or drop a file from `samples/`): yellow = sand,
+   red = big rock, green line = safest path, plus a GO / CAUTION / HOLD verdict.
+5. **Data & limits** tab: every source and every limit.
+
+### Map legend
+| On the map | Meaning |
+|---|---|
+| Grey background | MRO CTX satellite mosaic of Gale Crater |
+| Orange / red patches | Slope >15° / >25° (HiRISE 1 m DEM; MOLA outside its box) |
+| White line | **Curiosity traverse**: the path the rover actually drove since 2012 (NASA MMGIS) |
+| Green dashed line, numbered | **Your Marswalk**: the waypoints you clicked |
+| Green / yellow / orange / red dots | AI-checked Curiosity photos: predicted sand + big rock <10 / 10–30 / 30–50 / >50% |
+| Yellow dots | Curiosity science sites (landing site, Kimberley, Pahrump Hills, drill sites…) |
+| Purple dots | Orbital water-mineral detections (CRISM + OMEGA) |
+| Pink / blue | CRISM sulfate / clay signal strength (one observation) |
 
 ## The problem
 
@@ -48,6 +104,7 @@ each image's spacecraft clock falls inside the sol range of its matched site. Th
 **319 images at 89 rover stops** (sols 127–2434). Each one carries the AI's near-field
 soil/bedrock/sand/big-rock fractions and the experts' labels, which differ by 9.7 points of
 sand on average.
+
 **Route tool:** click waypoints and get:
 - distance, elevation profile, climb and descent;
 - **slope risk**: the share of the route crossing >15° and >25° cells. HiRISE is used inside its box
@@ -137,7 +194,7 @@ fields, which get read as bedrock or big rock.
 Needs Python 3.11 and about 2 GB of disk; no GPU.
 
 ```bash
-git clone <this repo's URL> marswalk-planner && cd marswalk-planner
+git clone https://github.com/10apashmeenkaur-boop/space-apps.git && cd space-apps
 python -m venv .venv && . .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt                       # CPU-only PyTorch, ~5 min
 python app.py                                         # open http://127.0.0.1:7860
@@ -161,6 +218,46 @@ python src/geolocate.py     # place AI4Mars test images by site/drive + AI resul
 pytest -q                   # planner, data and feature tests
 ```
 
+
+## Extra experiment: an "unfamiliar terrain" check (tested, not yet in the app)
+
+Mars is mostly unexplored, so a model can meet ground unlike anything it learned from. We tested
+a simple novelty check: kNN distance (k=10) from each DINOv2 patch to 10,000 training patches,
+with the threshold set at the 99th percentile of held-out patches (`src/novelty.py`,
+`results/novelty.json`, `results/novelty_experiments.png`).
+
+| Experiment | Result |
+|---|---|
+| Big rocks hidden from the reference, then shown | **AUROC 0.964**; flags 68.9% of big-rock pixels and 1.6% of other terrain ✅ |
+| 26 Perseverance Navcam images (Jezero) vs Curiosity test images | **Negative result**: near field 15.5% flagged vs 25.7% for Curiosity ❌ |
+
+So it spots terrain types it has not seen, but it does not separate a new crater as a whole. It
+mostly reacts to rover hardware, shadows and sky. We report this as is.
+
+## What's next (planned, not built)
+
+- **"What you'll see":** the nearest real rover photo for each leg of a route, before you get there.
+- **Helmet-camera ground check:** the same AI on live video at boot level.
+- **Route modes:** safest, fastest, science-rich, **emergency return when low on oxygen** (no climbing), flattest.
+- **Suit time + return-to-base:** a turn-back point and the safest path home.
+- **Radiation dose per walk:** walk time × 0.67 mSv/day, the surface average measured by Curiosity's RAD.
+- **Unfamiliar-terrain flags** in the app ("area of interest, not studied up close").
+- **Mission-ready:** preload the maps for offline use, retrain on astronaut camera images, run on space-rated hardware.
+
+## Tech stack
+
+| Layer | Tools |
+|---|---|
+| Frontend | Gradio (tabs, upload, results), Leaflet (interactive map, routes, popups), HTML/CSS/JS |
+| Backend | Python 3.11, NumPy, A* path planning |
+| AI | DINOv2-small (Meta, frozen features) + LightGBM (trained by us), PyTorch, Transformers, scikit-learn |
+| Data | NASA/JPL AI4Mars (Hugging Face), NASA Mars Trek (CTX, HiRISE DEM, MOLA, CRISM/OMEGA), PDS Geosciences Node, NASA MMGIS |
+| Quality | pytest (16/16 pass), clean-clone run test, pixel-hash leakage check |
+
+## Use of AI tools
+
+AI coding assistance (Claude Code) was used while building this project.
+
 ## Repo layout
 
 ```
@@ -175,6 +272,8 @@ src/briefing.py     drive briefing text
 src/geo.py          builds geo/ layers from NASA sources
 src/geolocate.py    site/drive from Navcam filenames -> positions + AI results
 src/marswalk.py     map route analysis (HiRISE slope, AI sand, stops, proven ground, walk time)
+src/novelty.py      unfamiliar-terrain (kNN novelty) check + experiments
+docs/               presentation (PPTX + PDF)
 tests/              pytest
 ```
 
