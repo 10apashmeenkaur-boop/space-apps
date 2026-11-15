@@ -2,6 +2,7 @@
 
 Sources (all verified live):
   HiRISE Gale DEM (1 m)   NASA Mars Trek   Gale_DEM_SMG_1m ImageServer (slope at a 4 m baseline)
+  MOLA MEGDR 128 px/deg   PDS Geosciences  megt00n090hb.img (fallback outside the HiRISE box)
   CRISM MTRDR summary     PDS Geosciences  FRT0000A091_07_SU165J_MTR3 (bands D2300, SINDEX2, BD1900_2)
   CRISM/OMEGA detections  NASA Mars Trek   Hydrous_Mineral_Detections_OMEGA_CRISM_clon0
   Curiosity traverse      NASA MMGIS       MSL_traverse.json, MSL_waypoints.json, MSL_SurfaceSites.json
@@ -28,6 +29,9 @@ MARS_R = 3396190.0  # m, IAU Mars 2000 sphere
 
 # Gale Crater window (deg). Crater centre ~5.4S 137.8E, Curiosity area ~4.6-4.9S 137.4E.
 LAT_N, LAT_S, LON_W, LON_E = -3.0, -7.5, 135.5, 140.0
+
+MEGDR = "https://pds-geosciences.wustl.edu/mgs/mgs-m-mola-5-megdr-l3-v1/mgsl_300x/meg128/megt00n090hb.img"
+MEGDR_PPD, MEGDR_COLS, MEGDR_TOP, MEGDR_WEST = 128, 11520, 0.0, 90.0
 
 CRISM_ID = "FRT0000A091"
 CRISM_URL = ("https://pds-geosciences.wustl.edu/mro/mro-m-crism-5-rdr-mptargeted-v1/mrocr_4001/mtrdr/2008/"
@@ -70,6 +74,31 @@ def png_data_url(rgba):
     b = io.BytesIO()
     Image.fromarray(rgba, "RGBA").save(b, "PNG", optimize=True)
     return "data:image/png;base64," + base64.b64encode(b.getvalue()).decode()
+
+
+# ---------------- MOLA (fallback outside the HiRISE box) ----------------
+def build_mola():
+    """Range-read only the Gale rows of the 128 px/deg MEGDR tile (~13 MB of 130 MB)."""
+    r0 = int(round((MEGDR_TOP - LAT_N) * MEGDR_PPD))
+    r1 = int(round((MEGDR_TOP - LAT_S) * MEGDR_PPD))
+    c0 = int(round((LON_W - MEGDR_WEST) * MEGDR_PPD))
+    c1 = int(round((LON_E - MEGDR_WEST) * MEGDR_PPD))
+    row_bytes = MEGDR_COLS * 2
+    raw = get(MEGDR, (r0 * row_bytes, r1 * row_bytes - 1))
+    dem = np.frombuffer(raw, ">i2").reshape(r1 - r0, MEGDR_COLS)[:, c0:c1].astype(np.int16)
+    np.savez_compressed(GEO / "mola_dem.npz", dem=dem, bounds=np.array([LAT_S, LAT_N, LON_W, LON_E]))
+    print(f"MOLA DEM {dem.shape}, elevation {dem.min()}..{dem.max()} m")
+    return dem
+
+
+def slope_deg(dem, lat_s, lat_n, ppd_lat, ppd_lon):
+    """Slope in degrees for an equirectangular grid (rows north->south)."""
+    h, w = dem.shape
+    lats = lat_n - (np.arange(h) + 0.5) / ppd_lat
+    dy = MARS_R * math.radians(1 / ppd_lat)
+    dx = (MARS_R * np.radians(1 / ppd_lon) * np.cos(np.radians(lats)))[:, None]
+    gy, gx = np.gradient(dem.astype(np.float64))
+    return np.degrees(np.arctan(np.hypot(gx / dx, gy / dy))).astype(np.float32)
 
 
 # ---------------- HiRISE 1 m DEM -> slope ----------------
@@ -234,6 +263,17 @@ def main():
     layers["overlays"]["slope"] = {"bounds": [[bs, bw], [bn, be]], "url": png_data_url(slope_overlay(slope)),
                                    "source": "MRO HiRISE Gale DEM (1 m), NASA Mars Trek",
                                    "stats": {"gt15": float((slope > 15).mean()), "gt25": float((slope > 25).mean())}}
+
+    dem = build_mola()
+    mslope = slope_deg(dem, LAT_S, LAT_N, MEGDR_PPD, MEGDR_PPD)
+    rgba = slope_overlay(mslope)
+    lat = LAT_N - (np.arange(dem.shape[0]) + 0.5) / MEGDR_PPD
+    lon = LON_W + (np.arange(dem.shape[1]) + 0.5) / MEGDR_PPD
+    inside = ((lat >= bs) & (lat <= bn))[:, None] & ((lon >= bw) & (lon <= be))[None, :]
+    rgba[inside] = 0  # HiRISE replaces MOLA inside its box
+    layers["overlays"]["slope_mola"] = {"bounds": [[LAT_S, LON_W], [LAT_N, LON_E]], "url": png_data_url(rgba),
+                                        "source": "MGS MOLA MEGDR (463 m), PDS - only outside the HiRISE box"}
+    print(f"MOLA slope (463 m): >15 deg {100 * (mslope > 15).mean():.2f}% of cells")
 
     try:
         bands = build_crism()

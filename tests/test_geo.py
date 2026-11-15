@@ -30,9 +30,19 @@ def test_route_analysis_uses_hirise_and_ai():
     r = analyse([[-4.5895, 137.4416], [-4.6268, 137.4069], [-4.6380, 137.4015], [-4.6634, 137.3776]])
     assert "error" not in r
     assert 5 < r["distance_km"] < 7 and r["slope_risk"] in {"LOW", "MEDIUM", "HIGH"}
-    assert len(r["ai"]) > 0 and all(a["distance_m"] <= 50 for a in r["ai"])
+    assert len(r["ai"]) > 0 and all(a["distance_m"] <= 200 for a in r["ai"])
+    assert [a["distance_m"] for a in r["ai"]] == sorted(a["distance_m"] for a in r["ai"])
+    assert r["hirise_km"] == r["distance_km"] and r["mola_km"] == 0
+    assert all(g["source"] == "HiRISE 1 m" for g in r["legs"])
     assert any(s["name"] == "Kimberley" for s in r["stops"])
 
 
-def test_route_outside_dem_is_refused():
-    assert "outside the HiRISE" in analyse([[-4.6, 137.4], [-5.5, 137.4]])["error"]
+def test_route_leaving_hirise_falls_back_to_mola():
+    r = analyse([[-4.6, 137.4], [-5.5, 137.4]])
+    assert "error" not in r
+    assert 0 < r["hirise_km"] < r["distance_km"] and r["mola_km"] > 0
+    assert r["legs"][0]["source"] == "mixed"
+
+
+def test_route_outside_gale_window_is_refused():
+    assert "outside the Gale Crater data window" in analyse([[-4.6, 137.4], [-9.0, 137.4]])["error"]
